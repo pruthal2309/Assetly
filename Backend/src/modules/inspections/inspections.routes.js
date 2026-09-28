@@ -7,10 +7,8 @@ import { createInspectionSchema, updateInspectionSchema } from './inspections.sc
 
 const router = Router({ mergeParams: true });
 
-router.use(authenticate);
-
-router.get('/assets/:id/inspections', authorize('inspection:read'), inspectionsController.listForAsset);
-router.post('/assets/:id/inspections', authorize('inspection:create'), validate({ body: createInspectionSchema }), inspectionsController.create);
-router.patch('/inspections/:id', authorize('inspection:update'), validate({ body: updateInspectionSchema }), inspectionsController.update);
+router.get('/assets/:id/inspections', authenticate, authorize('inspection:read'), inspectionsController.listForAsset);
+router.post('/assets/:id/inspections', authenticate, authorize('inspection:create'), validate({ body: createInspectionSchema }), inspectionsController.create);
+router.patch('/inspections/:id', authenticate, authorize('inspection:update'), validate({ body: updateInspectionSchema }), inspectionsController.update);
 
 export default router;

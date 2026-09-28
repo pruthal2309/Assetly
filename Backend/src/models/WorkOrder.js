@@ -42,7 +42,7 @@ const workOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['open', 'assigned', 'in_progress', 'completed', 'cancelled'],
+      enum: ['open', 'assigned', 'in_progress', 'submitted', 'completed', 'cancelled'],
       default: 'open'
     },
     source: {
@@ -59,7 +59,14 @@ const workOrderSchema = new mongoose.Schema(
     checklist: [checklistItemSchema],
     comments: [commentSchema],
     logs: [logSchema],
+    workNotes: { type: String, default: '' },
+    photos: [{ type: String }],
     startedAt: { type: Date },
+    submittedAt: { type: Date },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    reviewNotes: { type: String, default: '' },
     completedAt: { type: Date },
     cancelledAt: { type: Date },
     cancelReason: { type: String }

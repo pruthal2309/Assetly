@@ -30,6 +30,8 @@ export const listWorkOrders = async (filters, scopeFilter) => {
     .populate('assetId', 'assetCode name categoryKey location status health zoneId')
     .populate('assigneeId', 'name email role')
     .populate('createdBy', 'name email role')
+    .populate('submittedBy', 'name email role')
+    .populate('reviewedBy', 'name email role')
     .populate('zoneId', 'name code');
 };
 
@@ -38,6 +40,8 @@ export const getWorkOrderById = async (id, scopeFilter) => {
     .populate('assetId', 'assetCode name categoryKey location status health specs zoneId')
     .populate('assigneeId', 'name email role')
     .populate('createdBy', 'name email role')
+    .populate('submittedBy', 'name email role')
+    .populate('reviewedBy', 'name email role')
     .populate('comments.by', 'name email role')
     .populate('zoneId', 'name code');
 
@@ -46,6 +50,10 @@ export const getWorkOrderById = async (id, scopeFilter) => {
 };
 
 export const createWorkOrder = async (actorUser, data) => {
+  if (actorUser.role === 'engineer') {
+    throw new ForbiddenError('Engineers are not permitted to create work orders');
+  }
+
   const asset = await Asset.findOne({ _id: data.assetId, orgId: actorUser.orgId });
   if (!asset) throw new NotFoundError('Asset not found');
 
@@ -135,6 +143,10 @@ export const createWorkOrder = async (actorUser, data) => {
 };
 
 export const assignWorkOrder = async (actorUser, id, assigneeId, scopeFilter) => {
+  if (actorUser.role === 'engineer') {
+    throw new ForbiddenError('Engineers are not permitted to assign or reassign work orders');
+  }
+
   const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter });
   if (!wo) throw new NotFoundError('Work order not found');
 
@@ -182,10 +194,126 @@ export const updateWorkOrder = async (actorUser, id, updates, scopeFilter) => {
   Object.assign(wo, updates);
   await wo.save();
 
-  return WorkOrder.findById(wo._id).populate('assigneeId createdBy assetId');
+  return WorkOrder.findById(wo._id).populate('assigneeId createdBy assetId submittedBy reviewedBy');
 };
 
-export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes = '' }, scopeFilter) => {
+export const submitWorkOrder = async (actorUser, id, data, scopeFilter) => {
+  const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter });
+  if (!wo) throw new NotFoundError('Work order not found');
+
+  if (wo.status !== 'in_progress' && wo.status !== 'assigned') {
+    throw new BadRequestError(`Work order cannot be submitted from status '${wo.status}'`);
+  }
+
+  wo.status = 'submitted';
+  wo.submittedAt = new Date();
+  wo.submittedBy = actorUser._id;
+  if (data.workNotes !== undefined) wo.workNotes = data.workNotes;
+  if (data.photos) wo.photos = data.photos;
+  if (data.actualCost) wo.actualCost = data.actualCost;
+  if (data.checklist) wo.checklist = data.checklist;
+
+  wo.logs.push({
+    action: 'submitted',
+    cost: wo.actualCost || 0,
+    by: actorUser._id,
+    at: new Date()
+  });
+
+  await wo.save();
+
+  try {
+    await AssetEvent.create({
+      orgId: actorUser.orgId,
+      assetId: wo.assetId,
+      zoneId: wo.zoneId,
+      type: 'workorder.submitted',
+      actorId: actorUser._id,
+      data: { workOrderId: wo._id, code: wo.code, notes: data.workNotes }
+    });
+
+    const zoneSupervisors = await User.find({
+      orgId: actorUser.orgId,
+      role: { $in: ['supervisor', 'admin'] },
+      $or: [{ zoneIds: wo.zoneId }, { role: 'admin' }]
+    });
+
+    for (const sup of zoneSupervisors) {
+      await Notification.create({
+        userId: sup._id,
+        title: `Work Order Submitted: ${wo.code}`,
+        message: `${actorUser.name} submitted work order '${wo.title}' for review.`,
+        type: 'workorder'
+      });
+    }
+  } catch (err) {
+    console.error('Notification error on submit:', err.message);
+  }
+
+  return WorkOrder.findById(wo._id)
+    .populate('assetId', 'assetCode name location')
+    .populate('assigneeId', 'name email role')
+    .populate('submittedBy', 'name email role')
+    .populate('createdBy', 'name email role');
+};
+
+export const sendBackWorkOrder = async (actorUser, id, reason, scopeFilter) => {
+  if (actorUser.role === 'engineer') {
+    throw new ForbiddenError('Engineers cannot send back work orders');
+  }
+
+  const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter });
+  if (!wo) throw new NotFoundError('Work order not found');
+
+  if (wo.status !== 'submitted') {
+    throw new BadRequestError(`Only submitted work orders can be sent back (current status: '${wo.status}')`);
+  }
+
+  wo.status = 'in_progress';
+  wo.reviewedBy = actorUser._id;
+  wo.reviewedAt = new Date();
+  wo.reviewNotes = reason;
+
+  wo.logs.push({
+    action: 'sent_back',
+    cost: 0,
+    by: actorUser._id,
+    at: new Date()
+  });
+
+  await wo.save();
+
+  try {
+    await AssetEvent.create({
+      orgId: actorUser.orgId,
+      assetId: wo.assetId,
+      zoneId: wo.zoneId,
+      type: 'workorder.sent_back',
+      actorId: actorUser._id,
+      data: { workOrderId: wo._id, code: wo.code, reason }
+    });
+
+    if (wo.assigneeId) {
+      await Notification.create({
+        userId: wo.assigneeId,
+        title: `Work Order Sent Back: ${wo.code}`,
+        message: `Supervisor sent back '${wo.title}' for revision. Reason: ${reason}`,
+        type: 'workorder'
+      });
+    }
+  } catch (err) {
+    console.error('Notification error on send back:', err.message);
+  }
+
+  return WorkOrder.findById(wo._id)
+    .populate('assetId assigneeId createdBy submittedBy reviewedBy');
+};
+
+export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes = '', reviewNotes = '' }, scopeFilter) => {
+  if (actorUser.role === 'engineer') {
+    throw new ForbiddenError('Engineers must submit work orders for Supervisor review before completion');
+  }
+
   return withTransaction(async (session) => {
     const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter }).session(session);
     if (!wo) throw new NotFoundError('Work order not found');
@@ -194,15 +322,14 @@ export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes =
       throw new ConflictError('Work order is already completed');
     }
 
-    const isAssignee = wo.assigneeId && wo.assigneeId.toString() === actorUser._id.toString();
-    const isSupOrAdmin = actorUser.role === 'supervisor' || actorUser.role === 'admin';
-    if (!isAssignee && !isSupOrAdmin) {
-      throw new ForbiddenError('Only the assigned engineer, or a Supervisor/Admin can complete this work order');
-    }
-
     wo.status = 'completed';
     wo.completedAt = new Date();
-    wo.actualCost = actualCost || wo.estimatedCost || 0;
+    wo.reviewedBy = actorUser._id;
+    wo.reviewedAt = new Date();
+    if (reviewNotes) wo.reviewNotes = reviewNotes;
+    if (actualCost) wo.actualCost = actualCost;
+    if (!wo.actualCost) wo.actualCost = wo.estimatedCost || 0;
+
     wo.logs.push({
       action: 'completed',
       cost: wo.actualCost,
@@ -230,18 +357,22 @@ export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes =
             zoneId: asset.zoneId,
             type: 'workorder.completed',
             actorId: actorUser._id,
-            data: { workOrderId: wo._id, code: wo.code, actualCost: wo.actualCost, notes }
+            data: { workOrderId: wo._id, code: wo.code, actualCost: wo.actualCost, notes: reviewNotes || notes }
           }
         ],
         { session }
       );
     }
 
-    return WorkOrder.findById(wo._id).populate('assigneeId createdBy assetId').session(session);
+    return WorkOrder.findById(wo._id).populate('assigneeId createdBy assetId submittedBy reviewedBy').session(session);
   });
 };
 
 export const cancelWorkOrder = async (actorUser, id, reason, scopeFilter) => {
+  if (actorUser.role === 'engineer') {
+    throw new ForbiddenError('Engineers are not permitted to cancel work orders');
+  }
+
   const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter });
   if (!wo) throw new NotFoundError('Work order not found');
 

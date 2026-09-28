@@ -13,6 +13,8 @@ const assetEventSchema = new mongoose.Schema(
         'status.changed',
         'inspection.logged',
         'workorder.created',
+        'workorder.submitted',
+        'workorder.sent_back',
         'workorder.completed',
         'health.changed',
         'media.added',

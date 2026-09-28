@@ -11,6 +11,7 @@ import {
   FileText,
   Users,
   ShieldCheck,
+  Activity,
   LogOut,
   WifiOff
 } from 'lucide-react';
@@ -30,17 +31,57 @@ export const Layout = () => {
     }
   };
 
-  const navItems = [
-    { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
-    { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
-    { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
-    { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
-    { label: 'Citizen Reports', path: '/reports/staff', icon: FileText, perm: 'report:read' },
-    { label: 'Users', path: '/admin/users', icon: Users, perm: 'user:read' },
-    { label: 'Zones', path: '/admin/zones', icon: ShieldCheck, perm: 'zone:manage' },
-    { label: 'Categories', path: '/admin/categories', icon: Box, perm: 'category:manage' },
-    { label: 'Audit Trail', path: '/admin/audit', icon: ShieldCheck, perm: 'audit:read' }
-  ].filter((item) => !item.perm || can(item.perm));
+  const getNavItems = () => {
+    const role = user?.role;
+    if (role === 'admin') {
+      return [
+        { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
+        { label: 'Operations Tracking', path: '/admin/operations', icon: Activity, perm: 'user:read' },
+        { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
+        { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
+        { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
+        { label: 'Citizen Reports', path: '/reports/staff', icon: FileText, perm: 'report:read' },
+        { label: 'Users', path: '/admin/users', icon: Users, perm: 'user:read' },
+        { label: 'Zones', path: '/admin/zones', icon: ShieldCheck, perm: 'zone:manage' },
+        { label: 'Categories', path: '/admin/categories', icon: Box, perm: 'category:manage' },
+        { label: 'Audit Trail', path: '/admin/audit', icon: ShieldCheck, perm: 'audit:read' }
+      ];
+    }
+
+    if (role === 'supervisor') {
+      return [
+        { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
+        { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
+        { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
+        { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
+        { label: 'My Zones', path: '/admin/zones', icon: ShieldCheck, perm: 'zone:read' },
+        { label: 'Citizen Reports', path: '/reports/staff', icon: FileText, perm: 'report:read' }
+      ];
+    }
+
+    if (role === 'engineer') {
+      return [
+        { label: 'Dashboard (My Tasks)', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
+        { label: 'My Tasks', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
+        { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
+        { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
+        { label: 'QR Scan / Inspect', path: '/scan', icon: Box, perm: 'asset:read' },
+        { label: 'Citizen Reports', path: '/reports/staff', icon: FileText, perm: 'report:read' }
+      ];
+    }
+
+    // Default nav items
+    return [
+      { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
+      { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
+      { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
+      { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
+      { label: 'Citizen Reports', path: '/reports/staff', icon: FileText, perm: 'report:read' },
+      { label: 'Audit Trail', path: '/admin/audit', icon: ShieldCheck, perm: 'audit:read' }
+    ];
+  };
+
+  const navItems = getNavItems().filter((item) => !item.perm || can(item.perm));
 
   return (
     <div className="app-layout">

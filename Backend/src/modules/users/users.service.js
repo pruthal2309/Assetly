@@ -138,10 +138,6 @@ export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) 
     throw new NotFoundError('User not found');
   }
 
-  if (updates.role && actorUser._id.toString() === targetUserId.toString()) {
-    throw new ForbiddenError('Users cannot change their own role');
-  }
-
   if (
     (updates.role && updates.role !== 'admin' && targetUser.role === 'admin') ||
     (updates.status && updates.status === 'deactivated' && targetUser.role === 'admin')
@@ -154,6 +150,10 @@ export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) 
     if (activeAdminCount <= 1) {
       throw new ConflictError('Cannot demote or deactivate the last active Admin in the organization');
     }
+  }
+
+  if (updates.role && actorUser._id.toString() === targetUserId.toString()) {
+    throw new ForbiddenError('Users cannot change their own role');
   }
 
   if (updates.role && ['supervisor', 'engineer'].includes(updates.role)) {

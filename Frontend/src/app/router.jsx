@@ -20,6 +20,7 @@ import { QrScanPage } from '../features/scan/QrScanPage';
 import { UsersPage } from '../features/admin/UsersPage';
 import { ZonesPage, CategoriesPage } from '../features/admin/ZonesPage';
 import { AuditLogPage } from '../features/admin/AuditLogPage';
+import { OperationsTrackingPage } from '../features/admin/OperationsTrackingPage';
 import { ForbiddenPage, NotFoundPage } from '../features/admin/ForbiddenPage';
 
 export const router = createBrowserRouter([
@@ -120,6 +121,14 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission perm="report:read">
             <StaffReportsPage />
+          </RequirePermission>
+        )
+      },
+      {
+        path: 'admin/operations',
+        element: (
+          <RequirePermission perm="user:read">
+            <OperationsTrackingPage />
           </RequirePermission>
         )
       },

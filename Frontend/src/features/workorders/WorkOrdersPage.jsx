@@ -15,6 +15,7 @@ const COLUMNS = [
   { key: 'open', title: 'Open Requests' },
   { key: 'assigned', title: 'Assigned' },
   { key: 'in_progress', title: 'In Progress' },
+  { key: 'submitted', title: 'Submitted for Review' },
   { key: 'completed', title: 'Completed' }
 ];
 

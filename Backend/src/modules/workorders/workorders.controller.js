@@ -36,6 +36,16 @@ export const cancel = asyncHandler(async (req, res) => {
   res.json({ data: wo });
 });
 
+export const submit = asyncHandler(async (req, res) => {
+  const wo = await woService.submitWorkOrder(req.user, req.params.id, req.body, req.scope);
+  res.json({ data: wo });
+});
+
+export const sendBack = asyncHandler(async (req, res) => {
+  const wo = await woService.sendBackWorkOrder(req.user, req.params.id, req.body.reason, req.scope);
+  res.json({ data: wo });
+});
+
 export const comment = asyncHandler(async (req, res) => {
   const wo = await woService.addComment(req.user, req.params.id, req.body.text, req.scope);
   res.json({ data: wo });

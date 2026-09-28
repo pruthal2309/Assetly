@@ -75,7 +75,6 @@ export const ROLE_PERMS = {
     'inspection:create': 'zone',
     'inspection:update': 'own',
     'workorder:read': 'own',
-    'workorder:create': 'zone',
     'workorder:update': 'own',
     'workorder:complete': 'own',
     'report:create': 'zone',
@@ -96,7 +95,6 @@ export const ROLE_PERMS = {
     'audit:read': 'org'
   },
   citizen: {
-    'asset:read': 'public',
     'report:create': 'own',
     'report:read': 'own',
     'workorder:read': 'own',

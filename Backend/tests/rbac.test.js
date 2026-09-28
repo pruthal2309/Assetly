@@ -179,4 +179,53 @@ describe('RBAC & Permission Matrix Tests (Spec Section 9.9)', () => {
 
     expect(res.status).toBe(409);
   });
+
+  it('Case 8: Engineer attempts to POST /work-orders (create work order) -> 403 Forbidden', async () => {
+    const res = await request(app)
+      .post('/api/v1/work-orders')
+      .set('Authorization', `Bearer ${tokens.engineer}`)
+      .send({
+        assetId: assetZone1._id,
+        title: 'Unauthorized Engineer Creation Attempt'
+      });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('Case 9: Work Order Controlled State Machine (Engineer submit -> Supervisor approve)', async () => {
+    // 1. Supervisor creates work order and assigns to Engineer
+    const wo = await WorkOrder.create({
+      orgId: org._id,
+      assetId: assetZone1._id,
+      zoneId: zone1._id,
+      code: 'WO-FLOW-' + Date.now(),
+      title: 'Flow Test Order',
+      status: 'in_progress',
+      assigneeId: users.engineer._id,
+      createdBy: users.supervisor._id
+    });
+
+    // 2. Engineer submits completed work
+    const submitRes = await request(app)
+      .post(`/api/v1/work-orders/${wo._id}/submit`)
+      .set('Authorization', `Bearer ${tokens.engineer}`)
+      .send({
+        workNotes: 'Repaired street light housing and replaced 60W bulb.',
+        actualCost: 1500
+      });
+
+    expect(submitRes.status).toBe(200);
+    expect(submitRes.body.data.status).toBe('submitted');
+
+    // 3. Supervisor approves work order
+    const approveRes = await request(app)
+      .post(`/api/v1/work-orders/${wo._id}/complete`)
+      .set('Authorization', `Bearer ${tokens.supervisor}`)
+      .send({
+        reviewNotes: 'Verified field repairs. Looks good.'
+      });
+
+    expect(approveRes.status).toBe(200);
+    expect(approveRes.body.data.status).toBe('completed');
+  });
 });
