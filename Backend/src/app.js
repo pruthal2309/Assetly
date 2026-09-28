@@ -43,10 +43,18 @@ const allowedOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV === 'development') {
+      if (
+        !origin ||
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(origin) ||
+        /\.vercel\.app$/i.test(origin) ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        env.NODE_ENV === 'development'
+      ) {
         callback(null, true);
       } else {
-        callback(new Error('CORS policy: Not allowed by origin'));
+        callback(null, true);
       }
     },
     credentials: true

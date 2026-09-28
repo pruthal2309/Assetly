@@ -95,7 +95,14 @@ export const LoginPage = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Invalid credentials or login failure.');
+      const serverMsg = err.response?.data?.error?.message;
+      if (serverMsg) {
+        setError(serverMsg);
+      } else if (err.code === 'ERR_NETWORK' || !err.response) {
+        setError('Connecting to server... Render instance may be waking up (15-30s). Please try again in a moment.');
+      } else {
+        setError('Invalid credentials or login failure.');
+      }
     } finally {
       setLoading(false);
     }

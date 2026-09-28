@@ -5,7 +5,7 @@ import { writeAuditLog } from '../../middleware/audit.js';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: 'strict',
+  sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
   secure: env.NODE_ENV === 'production',
   maxAge: env.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000
 };

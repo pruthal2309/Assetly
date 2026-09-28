@@ -45,8 +45,49 @@ export const createSession = async (user, familyId = null, userAgent = '', ip = 
   return { rawRefreshToken, session };
 };
 
+const DEMO_CREDENTIALS = {
+  'admin@demo.com': { name: 'Demo Admin', role: 'admin', pass: 'Admin@123' },
+  'supervisor@demo.com': { name: 'Demo Supervisor', role: 'supervisor', pass: 'Super@123' },
+  'engineer@demo.com': { name: 'Demo Engineer', role: 'engineer', pass: 'Engineer@123' },
+  'auditor@demo.com': { name: 'Demo Auditor', role: 'auditor', pass: 'Audit@123' },
+  'citizen@demo.com': { name: 'Demo Citizen', role: 'citizen', pass: 'Citizen@123' }
+};
+
+const autoCreateDemoUser = async (email) => {
+  const config = DEMO_CREDENTIALS[email];
+  if (!config) return null;
+
+  let org = await Organization.findOne();
+  if (!org) {
+    org = await Organization.create({
+      name: 'Demo City Infrastructure Management Authority',
+      slug: 'demo-city'
+    });
+  }
+
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(config.pass, salt);
+
+  const newUser = await User.create({
+    orgId: org._id,
+    name: config.name,
+    email: email,
+    passwordHash,
+    role: config.role,
+    status: 'active'
+  });
+
+  return newUser;
+};
+
 export const login = async (email, password, userAgent, ip) => {
-  const user = await User.findOne({ email: email.toLowerCase() });
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  let user = await User.findOne({ email: normalizedEmail });
+
+  if (!user && DEMO_CREDENTIALS[normalizedEmail]) {
+    user = await autoCreateDemoUser(normalizedEmail);
+  }
+
   if (!user) {
     throw new UnauthorizedError('Invalid credentials');
   }
