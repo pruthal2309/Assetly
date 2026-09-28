@@ -76,12 +76,19 @@ export const WorkOrdersPage = () => {
 
   const selectedAssetObj = assets.find((a) => a._id === assetId);
 
-  // Filter engineers by zone if asset is selected, or all engineers
+  // Filter engineers by zone AND department matching selected asset (Section 9)
   const availableEngineers = zoneUsers.filter((u) => {
     if (u.role !== 'engineer' && u.role !== 'supervisor') return false;
+    if (u.status && u.status !== 'active') return false;
     if (!selectedAssetObj) return true;
-    const assetZoneId = selectedAssetObj.zoneId?._id || selectedAssetObj.zoneId;
-    return u.zoneIds?.some((z) => (z._id || z).toString() === assetZoneId?.toString());
+
+    const assetZoneId = (selectedAssetObj.zoneId?._id || selectedAssetObj.zoneId)?.toString();
+    const assetDeptId = (selectedAssetObj.departmentId?._id || selectedAssetObj.departmentId)?.toString();
+
+    const matchesZone = u.zoneIds?.some((z) => (z._id || z).toString() === assetZoneId);
+    const matchesDept = !assetDeptId || u.departmentIds?.some((d) => (d._id || d).toString() === assetDeptId);
+
+    return matchesZone && matchesDept;
   });
 
   const handleCreateSubmit = (e) => {

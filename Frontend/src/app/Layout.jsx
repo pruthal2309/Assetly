@@ -11,6 +11,7 @@ import {
   FileText,
   Users,
   ShieldCheck,
+  Building2,
   Activity,
   LogOut,
   WifiOff
@@ -37,6 +38,7 @@ export const Layout = () => {
       return [
         { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
         { label: 'Operations Tracking', path: '/admin/operations', icon: Activity, perm: 'user:read' },
+        { label: 'Departments', path: '/admin/departments', icon: Building2, perm: 'user:read' },
         { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
         { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
         { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },
@@ -51,6 +53,7 @@ export const Layout = () => {
     if (role === 'supervisor') {
       return [
         { label: 'Dashboard', path: '/', icon: LayoutDashboard, perm: 'dashboard:read' },
+        { label: 'Departments', path: '/admin/departments', icon: Building2, perm: 'user:read' },
         { label: 'GIS Map', path: '/map', icon: Map, perm: 'asset:read' },
         { label: 'Asset Registry', path: '/assets', icon: Box, perm: 'asset:read' },
         { label: 'Work Orders', path: '/work-orders', icon: Wrench, perm: 'workorder:read' },

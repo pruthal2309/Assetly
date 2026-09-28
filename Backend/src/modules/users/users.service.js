@@ -14,11 +14,18 @@ export const listUsers = async (scopeFilter) => {
     filter.zoneIds = filter.zoneId;
     delete filter.zoneId;
   }
-  return User.find(filter).select('-passwordHash').populate('zoneIds', '_id name code').sort({ createdAt: -1 });
+  return User.find(filter)
+    .select('-passwordHash')
+    .populate('zoneIds', '_id name code')
+    .populate('departmentIds', '_id name code')
+    .sort({ createdAt: -1 });
 };
 
 export const getUserById = async (id, scopeFilter) => {
-  const user = await User.findOne({ _id: id, ...scopeFilter }).select('-passwordHash').populate('zoneIds', '_id name code');
+  const user = await User.findOne({ _id: id, ...scopeFilter })
+    .select('-passwordHash')
+    .populate('zoneIds', '_id name code')
+    .populate('departmentIds', '_id name code');
   if (!user) {
     throw new NotFoundError('User not found');
   }
@@ -59,6 +66,7 @@ export const inviteUser = async (actorUser, { name, email, role, zoneIds = [], p
     email: normalizedEmail,
     role,
     zoneIds: zoneIds || [],
+    departmentIds: departmentIds || [],
     status: 'active',
     passwordHash
   });
@@ -176,6 +184,7 @@ export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) 
   }
   if (updates.name) targetUser.name = updates.name;
   if (updates.zoneIds) targetUser.zoneIds = updates.zoneIds;
+  if (updates.departmentIds) targetUser.departmentIds = updates.departmentIds;
 
   if (securityRevocationNeeded) {
     targetUser.tokenVersion += 1;
@@ -184,7 +193,7 @@ export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) 
   }
 
   await targetUser.save();
-  return User.findById(targetUser._id).select('-passwordHash').populate('zoneIds', '_id name code');
+  return User.findById(targetUser._id).select('-passwordHash').populate('zoneIds', '_id name code').populate('departmentIds', '_id name code');
 };
 
 export const deactivateUser = async (actorUser, targetUserId, scopeFilter) => {

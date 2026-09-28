@@ -6,7 +6,8 @@ export const inviteUserSchema = z.object({
   role: z.enum(['supervisor', 'engineer', 'auditor'], {
     errorMap: () => ({ message: 'Role must be supervisor, engineer, or auditor' })
   }),
-  zoneIds: z.array(z.string()).optional()
+  zoneIds: z.array(z.string()).optional(),
+  departmentIds: z.array(z.string()).optional()
 }).refine(
   (data) => {
     if (['supervisor', 'engineer'].includes(data.role)) {
@@ -24,5 +25,6 @@ export const updateUserSchema = z.object({
   name: z.string().min(2).optional(),
   role: z.enum(['admin', 'supervisor', 'engineer', 'auditor', 'citizen']).optional(),
   zoneIds: z.array(z.string()).optional(),
+  departmentIds: z.array(z.string()).optional(),
   status: z.enum(['active', 'invited', 'deactivated']).optional()
 });

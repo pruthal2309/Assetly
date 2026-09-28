@@ -21,6 +21,8 @@ const citizenReportSchema = new mongoose.Schema(
       }
     },
     matchedAssetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Asset', default: null },
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', default: null, index: true },
+    zoneId: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', default: null, index: true },
     matchDistanceM: { type: Number, default: null },
     workOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkOrder', default: null },
     status: {

@@ -22,6 +22,7 @@ const categorySchema = new mongoose.Schema(
     defaultLifeYears: { type: Number, default: 10 },
     inspectionIntervalDays: { type: Number, default: 180 },
     icon: { type: String, default: 'box' },
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', default: null, index: true },
     specSchema: [specSchemaField]
   },
   { timestamps: true }

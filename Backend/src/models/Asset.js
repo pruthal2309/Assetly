@@ -7,6 +7,7 @@ const assetSchema = new mongoose.Schema(
     name: { type: String, required: true },
     categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
     categoryKey: { type: String, required: true },
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true, index: true },
     zoneId: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
     status: {
       type: String,

@@ -22,6 +22,7 @@ import workordersRoutes from './modules/workorders/workorders.routes.js';
 import reportsRoutes from './modules/reports/reports.routes.js';
 import mediaRoutes from './modules/media/media.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
+import departmentsRoutes from './modules/departments/departments.routes.js';
 import auditRoutes from './modules/audit/audit.routes.js';
 import aiRoutes from './modules/ai/ai.routes.js';
 
@@ -78,6 +79,7 @@ const apiV1 = express.Router();
 apiV1.use('/auth', authRoutes);
 apiV1.use('/users', usersRoutes);
 apiV1.use('/zones', zonesRoutes);
+apiV1.use('/departments', departmentsRoutes);
 apiV1.use('/categories', categoriesRoutes);
 apiV1.use('/assets', assetsRoutes);
 apiV1.use('/', inspectionsRoutes);

@@ -16,7 +16,7 @@ const generateWOCode = async (orgId) => {
 };
 
 export const listWorkOrders = async (filters, scopeFilter) => {
-  const { assetId, status, priority, assigneeId, zoneId } = filters;
+  const { assetId, status, priority, assigneeId, zoneId, departmentId } = filters;
   const mongoFilter = { ...scopeFilter };
 
   if (assetId) mongoFilter.assetId = assetId;
@@ -24,26 +24,29 @@ export const listWorkOrders = async (filters, scopeFilter) => {
   if (priority) mongoFilter.priority = priority;
   if (assigneeId) mongoFilter.assigneeId = assigneeId;
   if (zoneId) mongoFilter.zoneId = zoneId;
+  if (departmentId) mongoFilter.departmentId = departmentId;
 
   return WorkOrder.find(mongoFilter)
     .sort({ createdAt: -1 })
-    .populate('assetId', 'assetCode name categoryKey location status health zoneId')
-    .populate('assigneeId', 'name email role')
+    .populate('assetId', 'assetCode name categoryKey location status health zoneId departmentId')
+    .populate('departmentId', 'name code')
+    .populate('zoneId', 'name code')
+    .populate('assigneeId', 'name email role departmentIds zoneIds')
     .populate('createdBy', 'name email role')
     .populate('submittedBy', 'name email role')
-    .populate('reviewedBy', 'name email role')
-    .populate('zoneId', 'name code');
+    .populate('reviewedBy', 'name email role');
 };
 
 export const getWorkOrderById = async (id, scopeFilter) => {
   const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter })
-    .populate('assetId', 'assetCode name categoryKey location status health specs zoneId')
-    .populate('assigneeId', 'name email role')
+    .populate('assetId', 'assetCode name categoryKey location status health specs zoneId departmentId')
+    .populate('departmentId', 'name code')
+    .populate('zoneId', 'name code')
+    .populate('assigneeId', 'name email role departmentIds zoneIds')
     .populate('createdBy', 'name email role')
     .populate('submittedBy', 'name email role')
     .populate('reviewedBy', 'name email role')
-    .populate('comments.by', 'name email role')
-    .populate('zoneId', 'name code');
+    .populate('comments.by', 'name email role');
 
   if (!wo) throw new NotFoundError('Work order not found or out of scope');
   return wo;
@@ -61,8 +64,10 @@ export const createWorkOrder = async (actorUser, data) => {
     const assignee = await User.findOne({ _id: data.assigneeId, orgId: actorUser.orgId });
     if (!assignee) throw new BadRequestError('Assignee user not found');
     const inZone = assignee.zoneIds.some((z) => z.toString() === asset.zoneId.toString());
-    if (!inZone && assignee.role !== 'admin') {
-      throw new BadRequestError("Assignee must belong to the asset's zone");
+    const inDept = (assignee.departmentIds || []).some((d) => d.toString() === asset.departmentId.toString());
+
+    if ((!inZone || !inDept) && assignee.role !== 'admin') {
+      throw new BadRequestError("Assignee must belong to both the asset's zone and department");
     }
   }
 
@@ -75,6 +80,7 @@ export const createWorkOrder = async (actorUser, data) => {
         {
           orgId: actorUser.orgId,
           assetId: asset._id,
+          departmentId: asset.departmentId,
           zoneId: asset.zoneId,
           code,
           title: data.title,
@@ -123,13 +129,14 @@ export const createWorkOrder = async (actorUser, data) => {
         const zoneEngineers = await User.find({
           orgId: actorUser.orgId,
           role: 'engineer',
-          zoneIds: asset.zoneId
+          zoneIds: asset.zoneId,
+          departmentIds: asset.departmentId
         });
         for (const eng of zoneEngineers) {
           await Notification.create({
             userId: eng._id,
             title: `New Open Work Order: ${code}`,
-            message: `Work Order '${data.title}' created in your ward for ${asset.name}.`,
+            message: `Work Order '${data.title}' created in your ward & department for ${asset.name}.`,
             type: 'workorder'
           });
         }
@@ -138,7 +145,7 @@ export const createWorkOrder = async (actorUser, data) => {
       console.error('Notification creation error:', notifErr.message);
     }
 
-    return WorkOrder.findById(wo._id).populate('assetId assigneeId createdBy');
+    return WorkOrder.findById(wo._id).populate('assetId assigneeId createdBy departmentId zoneId');
   });
 };
 
@@ -154,8 +161,9 @@ export const assignWorkOrder = async (actorUser, id, assigneeId, scopeFilter) =>
   if (!assignee) throw new BadRequestError('Assignee user not found');
 
   const inZone = assignee.zoneIds.some((z) => z.toString() === wo.zoneId.toString());
-  if (!inZone && assignee.role !== 'admin') {
-    throw new BadRequestError("Assignee must belong to the asset's zone");
+  const inDept = (assignee.departmentIds || []).some((d) => d.toString() === wo.departmentId.toString());
+  if ((!inZone || !inDept) && assignee.role !== 'admin') {
+    throw new BadRequestError("Assignee must belong to both the work order's zone and department");
   }
 
   wo.assigneeId = assignee._id;

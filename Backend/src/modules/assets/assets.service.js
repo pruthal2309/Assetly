@@ -110,12 +110,17 @@ export const createAsset = async (actorUser, data) => {
   validateSpecs(data.specs || {}, category.specSchema);
 
   const assetCode = await generateAssetCode(category.key, actorUser.orgId);
+  const departmentId = data.departmentId || category.departmentId;
+  if (!departmentId) {
+    throw new BadRequestError('Asset category must be mapped to a valid Department');
+  }
 
   const tempAsset = {
     ...data,
     orgId: actorUser.orgId,
     assetCode,
     categoryKey: category.key,
+    departmentId,
     installDate: data.installDate ? new Date(data.installDate) : new Date(),
     expectedLifeYears: data.expectedLifeYears || category.defaultLifeYears,
     createdBy: actorUser._id
@@ -140,7 +145,7 @@ export const createAsset = async (actorUser, data) => {
       { session }
     );
 
-    return Asset.findById(created._id).populate('categoryId zoneId').session(session);
+    return Asset.findById(created._id).populate('categoryId zoneId departmentId').session(session);
   });
 };
 
@@ -160,7 +165,11 @@ export const updateAsset = async (actorUser, assetId, updates, scopeFilter) => {
     }
   }
 
-  // Supervisor restriction: Cannot change zoneId; only Admin can.
+  // Supervisor & Engineer restriction: Cannot change departmentId or zoneId; only Admin can.
+  if (updates.departmentId && updates.departmentId.toString() !== asset.departmentId?.toString() && actorUser.role !== 'admin') {
+    throw new ForbiddenError('Only Admin can change the department of an asset');
+  }
+
   if (updates.zoneId && updates.zoneId.toString() !== asset.zoneId.toString() && actorUser.role !== 'admin') {
     throw new ForbiddenError('Only Admin can change the zone of an asset');
   }

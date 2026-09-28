@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
       required: true
     },
     zoneIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    departmentIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Department' }],
     status: {
       type: String,
       enum: ['active', 'invited', 'deactivated'],

@@ -38,6 +38,8 @@ export const createPublicReport = async ({ description, contact, location, media
   }).limit(1);
 
   let matchedAssetId = null;
+  let departmentId = null;
+  let zoneId = null;
   let matchDistanceM = null;
   let workOrderId = null;
   let status = 'received';
@@ -45,6 +47,8 @@ export const createPublicReport = async ({ description, contact, location, media
   if (nearestAssets.length > 0) {
     const matchedAsset = nearestAssets[0];
     matchedAssetId = matchedAsset._id;
+    departmentId = matchedAsset.departmentId;
+    zoneId = matchedAsset.zoneId;
     status = 'matched';
 
     // Auto create work order for matched asset
@@ -57,6 +61,7 @@ export const createPublicReport = async ({ description, contact, location, media
     const wo = await WorkOrder.create({
       orgId,
       assetId: matchedAsset._id,
+      departmentId: matchedAsset.departmentId,
       zoneId: matchedAsset.zoneId,
       code: woCode,
       title: `Citizen Report: Issue near ${matchedAsset.assetCode}`,
@@ -81,6 +86,8 @@ export const createPublicReport = async ({ description, contact, location, media
     location,
     mediaIds,
     matchedAssetId,
+    departmentId,
+    zoneId,
     matchDistanceM,
     workOrderId,
     status
@@ -90,14 +97,24 @@ export const createPublicReport = async ({ description, contact, location, media
     trackingCode: report.trackingCode,
     status: report.status,
     matchedAssetId: report.matchedAssetId,
+    departmentId: report.departmentId,
     createdAt: report.createdAt
   };
 };
 
 export const getPublicReportByCode = async (code) => {
   const report = await CitizenReport.findOne({ trackingCode: code })
-    .populate('matchedAssetId', 'assetCode name categoryKey status')
-    .populate('workOrderId', 'code status priority');
+    .populate('matchedAssetId', 'assetCode name categoryKey status departmentId zoneId')
+    .populate('departmentId', 'name code')
+    .populate('zoneId', 'name code')
+    .populate({
+      path: 'workOrderId',
+      select: 'code status priority assigneeId createdBy departmentId zoneId',
+      populate: [
+        { path: 'assigneeId', select: 'name email role' },
+        { path: 'createdBy', select: 'name email role' }
+      ]
+    });
 
   if (!report) throw new NotFoundError('Report not found with provided tracking code');
 
@@ -106,6 +123,8 @@ export const getPublicReportByCode = async (code) => {
     description: report.description,
     status: report.status,
     matchedAsset: report.matchedAssetId,
+    department: report.departmentId,
+    zone: report.zoneId,
     workOrder: report.workOrderId,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt
@@ -114,15 +133,16 @@ export const getPublicReportByCode = async (code) => {
 
 export const getPublicAssetByCode = async (assetCode) => {
   const asset = await Asset.findOne({ assetCode, archivedAt: null })
-    .populate('categoryId', 'name key icon');
+    .populate('categoryId', 'name key icon')
+    .populate('departmentId', 'name code');
 
   if (!asset) throw new NotFoundError('Asset not found');
 
-  // Return strictly limited public fields per spec 1.7 / 9.5
   return {
     assetCode: asset.assetCode,
     name: asset.name,
     category: asset.categoryId?.name || asset.categoryKey,
+    department: asset.departmentId?.name,
     status: asset.status,
     location: asset.location
   };
@@ -131,8 +151,14 @@ export const getPublicAssetByCode = async (assetCode) => {
 export const listStaffReports = async (scopeFilter) => {
   return CitizenReport.find(scopeFilter)
     .sort({ createdAt: -1 })
-    .populate('matchedAssetId', 'assetCode name categoryKey')
-    .populate('workOrderId', 'code status priority')
+    .populate('matchedAssetId', 'assetCode name categoryKey departmentId zoneId')
+    .populate('departmentId', 'name code')
+    .populate('zoneId', 'name code')
+    .populate({
+      path: 'workOrderId',
+      select: 'code status priority assigneeId createdBy',
+      populate: { path: 'assigneeId', select: 'name email' }
+    })
     .populate('mediaIds');
 };
 
@@ -153,6 +179,7 @@ export const triageReport = async (actorUser, reportId, data, scopeFilter) => {
       const wo = await WorkOrder.create({
         orgId: actorUser.orgId,
         assetId: asset._id,
+        departmentId: asset.departmentId,
         zoneId: asset.zoneId,
         code: woCode,
         title: `Triaged Report: Issue for ${asset.assetCode}`,
@@ -164,6 +191,8 @@ export const triageReport = async (actorUser, reportId, data, scopeFilter) => {
         createdBy: actorUser._id
       });
       report.workOrderId = wo._id;
+      report.departmentId = asset.departmentId;
+      report.zoneId = asset.zoneId;
       report.status = 'matched';
 
       asset.openWorkOrderCount += 1;

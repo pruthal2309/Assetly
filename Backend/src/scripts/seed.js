@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { connectDB } from '../db/connect.js';
 import { Organization } from '../models/Organization.js';
 import { Zone } from '../models/Zone.js';
+import { Department } from '../models/Department.js';
 import { User } from '../models/User.js';
 import { Session } from '../models/Session.js';
 import { Category } from '../models/Category.js';
@@ -40,6 +41,7 @@ export const seedDatabase = async () => {
   await Promise.all([
     Organization.deleteMany({}),
     Zone.deleteMany({}),
+    Department.deleteMany({}),
     User.deleteMany({}),
     Session.deleteMany({}),
     Category.deleteMany({}),
@@ -76,12 +78,28 @@ export const seedDatabase = async () => {
     zones.push(z);
   }
 
-  // 3. Categories with specSchemas
-  console.log('🏷️ Creating 6 Asset Categories...');
+  // 3. Departments
+  console.log('🏢 Creating 5 Departments...');
+  const deptData = [
+    { name: 'Water Supply', code: 'WAT', description: 'Municipal water distribution, main pipelines, and reservoir management' },
+    { name: 'Roads & Transportation', code: 'RDTR', description: 'Road network maintenance, bridges, flyovers, and traffic infrastructure' },
+    { name: 'Drainage', code: 'DRN', description: 'Stormwater channels, underground sewerage, and flood control systems' },
+    { name: 'Electrical', code: 'ELEC', description: 'Streetlighting, smart grid poles, and public power distribution' },
+    { name: 'Public Buildings', code: 'BLDG', description: 'Municipal offices, community halls, public health centers' }
+  ];
+  const deptMap = {};
+  for (const dd of deptData) {
+    const d = await Department.create({ ...dd, orgId: org._id, zoneIds: zones.map((z) => z._id) });
+    deptMap[dd.code] = d;
+  }
+
+  // 4. Categories with specSchemas and Department Mappings
+  console.log('🏷️ Creating 6 Asset Categories & Mapping to Departments...');
   const categoriesData = [
     {
       key: 'streetlight',
       name: 'Streetlight',
+      deptCode: 'ELEC',
       defaultLifeYears: 10,
       inspectionIntervalDays: 180,
       icon: 'lamp',
@@ -93,6 +111,7 @@ export const seedDatabase = async () => {
     {
       key: 'road',
       name: 'Road Segment',
+      deptCode: 'RDTR',
       defaultLifeYears: 15,
       inspectionIntervalDays: 90,
       icon: 'road',
@@ -104,6 +123,7 @@ export const seedDatabase = async () => {
     {
       key: 'drain',
       name: 'Drainage Channel',
+      deptCode: 'DRN',
       defaultLifeYears: 20,
       inspectionIntervalDays: 120,
       icon: 'droplet',
@@ -115,6 +135,7 @@ export const seedDatabase = async () => {
     {
       key: 'pipeline',
       name: 'Water Pipeline',
+      deptCode: 'WAT',
       defaultLifeYears: 25,
       inspectionIntervalDays: 180,
       icon: 'git-commit',
@@ -126,6 +147,7 @@ export const seedDatabase = async () => {
     {
       key: 'bridge',
       name: 'Bridge / Flyover',
+      deptCode: 'RDTR',
       defaultLifeYears: 50,
       inspectionIntervalDays: 365,
       icon: 'git-pull-request',
@@ -137,6 +159,7 @@ export const seedDatabase = async () => {
     {
       key: 'building',
       name: 'Public Building',
+      deptCode: 'BLDG',
       defaultLifeYears: 40,
       inspectionIntervalDays: 180,
       icon: 'building',
@@ -146,15 +169,29 @@ export const seedDatabase = async () => {
       ]
     }
   ];
+
   const categoriesMap = {};
   for (const cat of categoriesData) {
-    const createdCat = await Category.create({ ...cat, orgId: org._id });
+    const dept = deptMap[cat.deptCode];
+    const createdCat = await Category.create({
+      orgId: org._id,
+      key: cat.key,
+      name: cat.name,
+      departmentId: dept._id,
+      defaultLifeYears: cat.defaultLifeYears,
+      inspectionIntervalDays: cat.inspectionIntervalDays,
+      icon: cat.icon,
+      specSchema: cat.specSchema
+    });
     categoriesMap[cat.key] = createdCat;
+    await Department.findByIdAndUpdate(dept._id, { $addToSet: { categoryIds: createdCat._id } });
   }
 
-  // 4. Seed Demo Users
-  console.log('👥 Creating Demo Users...');
+  // 5. Seed Demo Users
+  console.log('👥 Creating Demo Users with Department Assignments...');
   const salt = await bcrypt.genSalt(10);
+  const allDeptIds = Object.values(deptMap).map((d) => d._id);
+
   const users = {
     admin: await User.create({
       orgId: org._id,
@@ -162,6 +199,7 @@ export const seedDatabase = async () => {
       email: 'admin@demo.com',
       passwordHash: await bcrypt.hash('Admin@123', salt),
       role: 'admin',
+      departmentIds: allDeptIds,
       status: 'active'
     }),
     supervisor: await User.create({
@@ -171,6 +209,7 @@ export const seedDatabase = async () => {
       passwordHash: await bcrypt.hash('Super@123', salt),
       role: 'supervisor',
       zoneIds: [zones[0]._id, zones[1]._id],
+      departmentIds: allDeptIds,
       status: 'active'
     }),
     engineer: await User.create({
@@ -179,7 +218,8 @@ export const seedDatabase = async () => {
       email: 'engineer@demo.com',
       passwordHash: await bcrypt.hash('Engineer@123', salt),
       role: 'engineer',
-      zoneIds: [zones[0]._id],
+      zoneIds: [zones[0]._id, zones[1]._id],
+      departmentIds: allDeptIds,
       status: 'active'
     }),
     auditor: await User.create({
@@ -188,6 +228,7 @@ export const seedDatabase = async () => {
       email: 'auditor@demo.com',
       passwordHash: await bcrypt.hash('Audit@123', salt),
       role: 'auditor',
+      departmentIds: allDeptIds,
       status: 'active'
     }),
     citizen: await User.create({
@@ -200,8 +241,17 @@ export const seedDatabase = async () => {
     })
   };
 
-  // 5. Seed 500 Assets
-  console.log('🏗️ Generating 500 Realistic Infrastructure Assets...');
+  for (const d of Object.values(deptMap)) {
+    await Department.findByIdAndUpdate(d._id, {
+      $addToSet: {
+        supervisorIds: users.supervisor._id,
+        engineerIds: users.engineer._id
+      }
+    });
+  }
+
+  // 6. Seed 500 Assets
+  console.log('🏗️ Generating 500 Realistic Infrastructure Assets with Department IDs...');
   const assetDistribution = [
     { key: 'streetlight', count: 200, prefix: 'SL' },
     { key: 'road', count: 125, prefix: 'RD' },
@@ -244,6 +294,7 @@ export const seedDatabase = async () => {
         name: i === 1 ? `⭐ Hero Asset: ${category.name} ${dist.prefix}-0001` : `${category.name} ${dist.prefix}-${seqStr}`,
         categoryId: category._id,
         categoryKey: category.key,
+        departmentId: category.departmentId,
         zoneId: zone._id,
         status,
         location: { type: 'Point', coordinates: coords },
@@ -285,7 +336,7 @@ export const seedDatabase = async () => {
   hero1.status = 'in_service';
   await hero1.save();
 
-  // 6. Seed 250 Inspections in Bulk
+  // 7. Seed 250 Inspections
   console.log('🔍 Logging 250 Inspection Records...');
   const inspectionDocs = [];
   for (let i = 0; i < 250; i++) {
@@ -308,9 +359,9 @@ export const seedDatabase = async () => {
   }
   await Inspection.insertMany(inspectionDocs);
 
-  // 7. Seed 70 Work Orders in Bulk
-  console.log('🛠️ Creating 70 Work Orders in Mixed States...');
-  const woStatuses = ['open', 'assigned', 'in_progress', 'completed', 'cancelled'];
+  // 8. Seed 70 Work Orders
+  console.log('🛠️ Creating 70 Work Orders with Department IDs...');
+  const woStatuses = ['open', 'assigned', 'in_progress', 'submitted', 'completed', 'cancelled'];
   const priorities = ['low', 'medium', 'high', 'urgent'];
   const woDocs = [];
 
@@ -322,6 +373,7 @@ export const seedDatabase = async () => {
     woDocs.push({
       orgId: org._id,
       assetId: asset._id,
+      departmentId: asset.departmentId,
       zoneId: asset.zoneId,
       code: woCode,
       title: `Maintenance Request #${i} for ${asset.assetCode}`,
@@ -340,8 +392,8 @@ export const seedDatabase = async () => {
   await WorkOrder.insertMany(woDocs);
   await Counter.findByIdAndUpdate(`WO:2026:${org._id}`, { seq: 70 }, { upsert: true });
 
-  // 8. Seed 12 Citizen Reports
-  console.log('📢 Creating 12 Citizen Reports...');
+  // 9. Seed 12 Citizen Reports
+  console.log('📢 Creating 12 Citizen Reports with Department Routing...');
   const reportDocs = [];
   for (let i = 1; i <= 12; i++) {
     const asset = createdAssets[i * 10];
@@ -355,13 +407,15 @@ export const seedDatabase = async () => {
       description: `Reported damaged pavement/pipe leakage near ${asset.name}`,
       location: asset.location,
       matchedAssetId: asset._id,
+      departmentId: asset.departmentId,
+      zoneId: asset.zoneId,
       matchDistanceM: 12,
       status: i % 2 === 0 ? 'matched' : 'received'
     });
   }
   await CitizenReport.insertMany(reportDocs);
 
-  // 9. Timeline Events for Hero Asset 1
+  // 10. Timeline Events
   console.log('📜 Populating Hero Timeline Events...');
   await AssetEvent.insertMany([
     {
@@ -381,37 +435,10 @@ export const seedDatabase = async () => {
       actorId: users.supervisor._id,
       at: new Date(Date.now() - 300 * 86400000),
       data: { from: 'planned', to: 'acquired' }
-    },
-    {
-      orgId: org._id,
-      assetId: hero1._id,
-      zoneId: hero1.zoneId,
-      type: 'status.changed',
-      actorId: users.engineer._id,
-      at: new Date(Date.now() - 250 * 86400000),
-      data: { from: 'acquired', to: 'installed' }
-    },
-    {
-      orgId: org._id,
-      assetId: hero1._id,
-      zoneId: hero1.zoneId,
-      type: 'status.changed',
-      actorId: users.engineer._id,
-      at: new Date(Date.now() - 200 * 86400000),
-      data: { from: 'installed', to: 'in_service' }
-    },
-    {
-      orgId: org._id,
-      assetId: hero1._id,
-      zoneId: hero1.zoneId,
-      type: 'inspection.logged',
-      actorId: users.engineer._id,
-      at: new Date(Date.now() - 30 * 86400000),
-      data: { rating: 4, aiSeverity: 'low', newHealthScore: 92 }
     }
   ]);
 
-  console.log('✅ Seed complete! All 5 demo user credentials ready.');
+  console.log('✅ Seed complete! All 5 departments and demo user credentials ready.');
   console.log('----------------------------------------------------');
   console.log('🔑 Demo User Accounts:');
   console.log(' - Admin:      admin@demo.com      / Admin@123');

@@ -21,6 +21,7 @@ import { UsersPage } from '../features/admin/UsersPage';
 import { ZonesPage, CategoriesPage } from '../features/admin/ZonesPage';
 import { AuditLogPage } from '../features/admin/AuditLogPage';
 import { OperationsTrackingPage } from '../features/admin/OperationsTrackingPage';
+import { DepartmentsPage } from '../features/admin/DepartmentsPage';
 import { ForbiddenPage, NotFoundPage } from '../features/admin/ForbiddenPage';
 
 export const router = createBrowserRouter([
@@ -129,6 +130,14 @@ export const router = createBrowserRouter([
         element: (
           <RequirePermission perm="user:read">
             <OperationsTrackingPage />
+          </RequirePermission>
+        )
+      },
+      {
+        path: 'admin/departments',
+        element: (
+          <RequirePermission perm="user:read">
+            <DepartmentsPage />
           </RequirePermission>
         )
       },

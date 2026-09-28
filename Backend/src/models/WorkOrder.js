@@ -31,6 +31,7 @@ const workOrderSchema = new mongoose.Schema(
   {
     orgId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
     assetId: { type: mongoose.Schema.Types.ObjectId, ref: 'Asset', required: true, index: true },
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true, index: true },
     zoneId: { type: mongoose.Schema.Types.ObjectId, ref: 'Zone', required: true, index: true },
     code: { type: String, required: true },
     title: { type: String, required: true },
