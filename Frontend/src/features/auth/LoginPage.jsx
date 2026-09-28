@@ -4,7 +4,69 @@ import { useAuthStore } from './authStore';
 import { apiClient } from '../../shared/api/client';
 import { GlassCard } from '../../shared/ui/GlassCard';
 import { Button } from '../../shared/ui/Button';
-import { Shield, User, Lock, ArrowRight, Building, Globe, CheckCircle } from 'lucide-react';
+import {
+  Shield, User, Lock, ArrowRight, Building, Globe,
+  Settings, HardHat, ClipboardList, UserCheck, Zap
+} from 'lucide-react';
+
+const DEMO_ROLES = [
+  {
+    role: 'admin',
+    label: 'Admin',
+    email: 'admin@demo.com',
+    password: 'Admin@123',
+    icon: Settings,
+    color: '#0d3a35',
+    bg: 'rgba(13,58,53,0.08)',
+    border: 'rgba(13,58,53,0.2)',
+    desc: 'Org-wide management'
+  },
+  {
+    role: 'supervisor',
+    label: 'Supervisor',
+    email: 'supervisor@demo.com',
+    password: 'Super@123',
+    icon: ClipboardList,
+    color: '#6d28d9',
+    bg: 'rgba(109,40,217,0.08)',
+    border: 'rgba(109,40,217,0.2)',
+    desc: 'Zone & task management'
+  },
+  {
+    role: 'engineer',
+    label: 'Engineer',
+    email: 'engineer@demo.com',
+    password: 'Engineer@123',
+    icon: HardHat,
+    color: '#b45309',
+    bg: 'rgba(180,83,9,0.08)',
+    border: 'rgba(180,83,9,0.2)',
+    desc: 'Field task execution'
+  },
+  {
+    role: 'auditor',
+    label: 'Auditor',
+    email: 'auditor@demo.com',
+    password: 'Audit@123',
+    icon: UserCheck,
+    color: '#0e7490',
+    bg: 'rgba(14,116,144,0.08)',
+    border: 'rgba(14,116,144,0.2)',
+    desc: 'Reports & audit logs'
+  }
+];
+
+const CITIZEN_DEMO = {
+  role: 'citizen',
+  label: 'Citizen',
+  email: 'citizen@demo.com',
+  password: 'Citizen@123',
+  icon: Globe,
+  color: '#059669',
+  bg: 'rgba(5,150,105,0.08)',
+  border: 'rgba(5,150,105,0.2)',
+  desc: 'Submit & track reports'
+};
 
 export const LoginPage = () => {
   const [portalMode, setPortalMode] = useState('staff'); // 'staff' or 'citizen'
@@ -12,25 +74,21 @@ export const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [activeRole, setActiveRole] = useState(null);
 
   const setAuthData = useAuthStore((state) => state.setAuthData);
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
-    if (e) e.preventDefault();
+  const doLogin = async (loginEmail, loginPassword) => {
     setError(null);
     setLoading(true);
-
     try {
       const res = await apiClient.post('/auth/login', {
-        email,
-        password
+        email: loginEmail,
+        password: loginPassword
       });
-
       const { accessToken, user, zones, permissions } = res.data.data;
       setAuthData({ user, zones, permissions, accessToken });
-
-      // Redirect directly based on server-authenticated user role
       if (user.role === 'citizen') {
         navigate('/report');
       } else {
@@ -42,6 +100,22 @@ export const LoginPage = () => {
       setLoading(false);
     }
   };
+
+  const handleRoleClick = async (demoUser) => {
+    setActiveRole(demoUser.role);
+    setEmail(demoUser.email);
+    setPassword(demoUser.password);
+    await doLogin(demoUser.email, demoUser.password);
+    setActiveRole(null);
+  };
+
+  const handleLogin = async (e) => {
+    if (e) e.preventDefault();
+    await doLogin(email, password);
+  };
+
+  const staffRoles = DEMO_ROLES;
+  const citizenRole = CITIZEN_DEMO;
 
   return (
     <div
@@ -57,13 +131,13 @@ export const LoginPage = () => {
       <GlassCard
         style={{
           width: '100%',
-          maxWidth: '460px',
+          maxWidth: '500px',
           padding: '2.5rem 2rem',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Subtle Accent Bar */}
+        {/* Accent Bar */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: portalMode === 'staff' ? 'var(--deep-teal)' : 'var(--plum-accent)' }} />
 
         {/* Portal Mode Tabs */}
@@ -96,10 +170,7 @@ export const LoginPage = () => {
               color: portalMode === 'staff' ? '#FFFFFF' : 'var(--secondary-text)',
               boxShadow: portalMode === 'staff' ? '0 2px 8px rgba(13, 58, 53, 0.2)' : 'none'
             }}
-            onClick={() => {
-              setPortalMode('staff');
-              setError(null);
-            }}
+            onClick={() => { setPortalMode('staff'); setError(null); setEmail(''); setPassword(''); }}
           >
             <Building size={16} /> Staff / Admin Login
           </button>
@@ -123,16 +194,14 @@ export const LoginPage = () => {
               color: portalMode === 'citizen' ? '#FFFFFF' : 'var(--secondary-text)',
               boxShadow: portalMode === 'citizen' ? '0 2px 8px rgba(13, 58, 53, 0.2)' : 'none'
             }}
-            onClick={() => {
-              setPortalMode('citizen');
-              setError(null);
-            }}
+            onClick={() => { setPortalMode('citizen'); setError(null); setEmail(''); setPassword(''); }}
           >
             <Globe size={16} /> Citizen Portal
           </button>
         </div>
 
-        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+        {/* Logo & Title */}
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <div
             style={{
               width: '56px',
@@ -149,14 +218,107 @@ export const LoginPage = () => {
           >
             <Shield size={28} />
           </div>
-          <h1 style={{ fontSize: '1.85rem', fontFamily: 'var(--font-h1)', color: 'var(--primary-dark-teal)', fontWeight: 700 }}>
+          <h1 style={{ fontSize: '1.6rem', fontFamily: 'var(--font-h1)', color: 'var(--primary-dark-teal)', fontWeight: 700 }}>
             {portalMode === 'staff' ? 'Internal Staff Portal' : 'Public Citizen Portal'}
           </h1>
           <p style={{ color: 'var(--secondary-text)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
             {portalMode === 'staff'
-              ? 'Sign in to access Admin, Supervisor, Engineer & Auditor Workspaces'
+              ? 'Select a role below to jump in instantly'
               : 'Sign in to report infrastructure issues and track grievances'}
           </p>
+        </div>
+
+        {/* ── Demo Role Cards (Staff) ── */}
+        {portalMode === 'staff' && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--secondary-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Zap size={12} /> Quick Demo Access — Click to Sign In
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              {staffRoles.map((r) => {
+                const Icon = r.icon;
+                const isActive = activeRole === r.role && loading;
+                return (
+                  <button
+                    key={r.role}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleRoleClick(r)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.65rem 0.75rem',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${r.border}`,
+                      background: isActive ? r.bg : 'rgba(255,255,255,0.5)',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.18s ease',
+                      textAlign: 'left',
+                      opacity: loading && !isActive ? 0.5 : 1
+                    }}
+                    onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = r.bg; }}
+                    onMouseLeave={(e) => { if (!loading && !isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.5)'; }}
+                  >
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: r.bg, border: `1px solid ${r.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {isActive
+                        ? <div style={{ width: '14px', height: '14px', border: `2px solid ${r.color}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                        : <Icon size={16} color={r.color} />}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: r.color, lineHeight: 1.2 }}>{r.label}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--secondary-text)', lineHeight: 1.3 }}>{r.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Demo Citizen Card ── */}
+        {portalMode === 'citizen' && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--secondary-text)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Zap size={12} /> Quick Demo Access — Click to Sign In
+            </div>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => handleRoleClick(citizenRole)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '10px',
+                border: `1.5px solid ${citizenRole.border}`,
+                background: activeRole === 'citizen' && loading ? citizenRole.bg : 'rgba(255,255,255,0.5)',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.18s ease'
+              }}
+              onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = citizenRole.bg; }}
+              onMouseLeave={(e) => { if (!loading && !(activeRole === 'citizen')) e.currentTarget.style.background = 'rgba(255,255,255,0.5)'; }}
+            >
+              <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: citizenRole.bg, border: `1px solid ${citizenRole.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {activeRole === 'citizen' && loading
+                  ? <div style={{ width: '14px', height: '14px', border: `2px solid ${citizenRole.color}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  : <Globe size={18} color={citizenRole.color} />}
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.87rem', fontWeight: 700, color: citizenRole.color }}>Demo Citizen</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--secondary-text)' }}>citizen@demo.com — Click to enter portal</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--subtle-border)' }} />
+          <span style={{ fontSize: '0.75rem', color: 'var(--secondary-text)', fontWeight: 600, whiteSpace: 'nowrap' }}>or sign in manually</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--subtle-border)' }} />
         </div>
 
         {error && (
@@ -187,7 +349,7 @@ export const LoginPage = () => {
                 type="email"
                 className="glass-input"
                 style={{ paddingLeft: '2.5rem' }}
-                placeholder={portalMode === 'staff' ? 'admin@demo.com or engineer@demo.com' : 'citizen@example.com'}
+                placeholder={portalMode === 'staff' ? 'admin@demo.com' : 'citizen@example.com'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -214,7 +376,7 @@ export const LoginPage = () => {
           </div>
 
           <Button type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Authenticating...' : portalMode === 'staff' ? 'Sign In to Workspace' : 'Sign In as Citizen'} <ArrowRight size={18} />
+            {loading && !activeRole ? 'Authenticating...' : portalMode === 'staff' ? 'Sign In to Workspace' : 'Sign In as Citizen'} <ArrowRight size={18} />
           </Button>
         </form>
 
@@ -239,6 +401,9 @@ export const LoginPage = () => {
             </Link>
           </div>
         </div>
+
+        {/* Spinner keyframe */}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </GlassCard>
     </div>
   );
