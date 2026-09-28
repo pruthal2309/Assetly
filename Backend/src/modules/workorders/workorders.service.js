@@ -3,6 +3,7 @@ import { Asset } from '../../models/Asset.js';
 import { User } from '../../models/User.js';
 import { AssetEvent } from '../../models/AssetEvent.js';
 import { Counter } from '../../models/Counter.js';
+import { Notification } from '../../models/Notification.js';
 import { computeHealth } from '../assets/health.js';
 import { withTransaction } from '../../db/withTransaction.js';
 import { NotFoundError, ForbiddenError, BadRequestError, ConflictError } from '../../common/errors.js';
@@ -26,7 +27,7 @@ export const listWorkOrders = async (filters, scopeFilter) => {
 
   return WorkOrder.find(mongoFilter)
     .sort({ createdAt: -1 })
-    .populate('assetId', 'assetCode name categoryKey location status health')
+    .populate('assetId', 'assetCode name categoryKey location status health zoneId')
     .populate('assigneeId', 'name email role')
     .populate('createdBy', 'name email role')
     .populate('zoneId', 'name code');
@@ -34,7 +35,7 @@ export const listWorkOrders = async (filters, scopeFilter) => {
 
 export const getWorkOrderById = async (id, scopeFilter) => {
   const wo = await WorkOrder.findOne({ _id: id, ...scopeFilter })
-    .populate('assetId', 'assetCode name categoryKey location status health specs')
+    .populate('assetId', 'assetCode name categoryKey location status health specs zoneId')
     .populate('assigneeId', 'name email role')
     .populate('createdBy', 'name email role')
     .populate('comments.by', 'name email role')
@@ -53,7 +54,7 @@ export const createWorkOrder = async (actorUser, data) => {
     if (!assignee) throw new BadRequestError('Assignee user not found');
     const inZone = assignee.zoneIds.some((z) => z.toString() === asset.zoneId.toString());
     if (!inZone && assignee.role !== 'admin') {
-      throw new BadRequestError('Assignee must belong to the asset\'s zone');
+      throw new BadRequestError("Assignee must belong to the asset's zone");
     }
   }
 
@@ -61,7 +62,7 @@ export const createWorkOrder = async (actorUser, data) => {
   const status = data.assigneeId ? 'assigned' : 'open';
 
   return withTransaction(async (session) => {
-    const [wo] = await WorkOrder.create(
+    const woDocs = await WorkOrder.create(
       [
         {
           orgId: actorUser.orgId,
@@ -79,12 +80,13 @@ export const createWorkOrder = async (actorUser, data) => {
           checklist: data.checklist || []
         }
       ],
-      { session }
+      session ? { session } : {}
     );
+    const wo = Array.isArray(woDocs) ? woDocs[0] : woDocs;
 
     asset.openWorkOrderCount += 1;
     asset.health = computeHealth(asset);
-    await asset.save({ session });
+    await asset.save(session ? { session } : {});
 
     await AssetEvent.create(
       [
@@ -97,10 +99,38 @@ export const createWorkOrder = async (actorUser, data) => {
           data: { workOrderId: wo._id, code, title: wo.title, priority: wo.priority }
         }
       ],
-      { session }
+      session ? { session } : {}
     );
 
-    return WorkOrder.findById(wo._id).populate('assetId assigneeId createdBy').session(session);
+    // Notify assigned engineer or engineers in the ward
+    try {
+      if (data.assigneeId) {
+        await Notification.create({
+          userId: data.assigneeId,
+          title: `New Assigned Work Order: ${code}`,
+          message: `Work Order '${data.title}' assigned for ${asset.name}. Priority: ${data.priority || 'medium'}.`,
+          type: 'workorder'
+        });
+      } else {
+        const zoneEngineers = await User.find({
+          orgId: actorUser.orgId,
+          role: 'engineer',
+          zoneIds: asset.zoneId
+        });
+        for (const eng of zoneEngineers) {
+          await Notification.create({
+            userId: eng._id,
+            title: `New Open Work Order: ${code}`,
+            message: `Work Order '${data.title}' created in your ward for ${asset.name}.`,
+            type: 'workorder'
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.error('Notification creation error:', notifErr.message);
+    }
+
+    return WorkOrder.findById(wo._id).populate('assetId assigneeId createdBy');
   });
 };
 
@@ -122,6 +152,17 @@ export const assignWorkOrder = async (actorUser, id, assigneeId, scopeFilter) =>
   }
   await wo.save();
 
+  try {
+    await Notification.create({
+      userId: assignee._id,
+      title: `Assigned Work Order: ${wo.code}`,
+      message: `You have been assigned to work order '${wo.title}'. Priority: ${wo.priority}.`,
+      type: 'workorder'
+    });
+  } catch (err) {
+    console.error('Notification error:', err.message);
+  }
+
   return WorkOrder.findById(wo._id).populate('assigneeId createdBy assetId');
 };
 
@@ -131,7 +172,6 @@ export const updateWorkOrder = async (actorUser, id, updates, scopeFilter) => {
 
   if (updates.status === 'in_progress' && wo.status !== 'in_progress') {
     wo.startedAt = new Date();
-    // Update asset status to under_maintenance
     const asset = await Asset.findById(wo.assetId);
     if (asset && asset.status === 'in_service') {
       asset.status = 'under_maintenance';
@@ -154,7 +194,6 @@ export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes =
       throw new ConflictError('Work order is already completed');
     }
 
-    // Permission rule: Assignee, or Supervisor/Admin in scope
     const isAssignee = wo.assigneeId && wo.assigneeId.toString() === actorUser._id.toString();
     const isSupOrAdmin = actorUser.role === 'supervisor' || actorUser.role === 'admin';
     if (!isAssignee && !isSupOrAdmin) {
@@ -172,12 +211,10 @@ export const completeWorkOrder = async (actorUser, id, { actualCost = 0, notes =
     });
     await wo.save({ session });
 
-    // Update asset
     const asset = await Asset.findById(wo.assetId).session(session);
     if (asset) {
       asset.openWorkOrderCount = Math.max(0, asset.openWorkOrderCount - 1);
 
-      // Restore in_service when no other open work orders exist
       if (asset.openWorkOrderCount === 0 && asset.status === 'under_maintenance') {
         asset.status = 'in_service';
       }

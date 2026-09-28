@@ -4,9 +4,10 @@ import { useAuthStore } from './authStore';
 import { apiClient } from '../../shared/api/client';
 import { GlassCard } from '../../shared/ui/GlassCard';
 import { Button } from '../../shared/ui/Button';
-import { Shield, User, Lock, ArrowRight } from 'lucide-react';
+import { Shield, User, Lock, ArrowRight, Building, Globe, CheckCircle } from 'lucide-react';
 
 export const LoginPage = () => {
+  const [portalMode, setPortalMode] = useState('staff'); // 'staff' or 'citizen'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -29,6 +30,7 @@ export const LoginPage = () => {
       const { accessToken, user, zones, permissions } = res.data.data;
       setAuthData({ user, zones, permissions, accessToken });
 
+      // Redirect directly based on server-authenticated user role
       if (user.role === 'citizen') {
         navigate('/report');
       } else {
@@ -55,16 +57,82 @@ export const LoginPage = () => {
       <GlassCard
         style={{
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '460px',
           padding: '2.5rem 2rem',
           position: 'relative',
           overflow: 'hidden'
         }}
       >
-        {/* Subtle Top Accent Line in Plum */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--plum-accent)' }} />
+        {/* Subtle Accent Bar */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: portalMode === 'staff' ? 'var(--deep-teal)' : 'var(--plum-accent)' }} />
 
-        <div style={{ textAlign: 'center', marginBottom: '2rem', marginTop: '0.5rem' }}>
+        {/* Portal Mode Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            background: 'rgba(13, 58, 53, 0.06)',
+            borderRadius: 'var(--radius-md)',
+            padding: '4px',
+            marginBottom: '1.75rem',
+            border: '1px solid var(--subtle-border)'
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              flex: 1,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              transition: 'all 0.2s ease',
+              background: portalMode === 'staff' ? 'var(--deep-teal)' : 'transparent',
+              color: portalMode === 'staff' ? '#FFFFFF' : 'var(--secondary-text)',
+              boxShadow: portalMode === 'staff' ? '0 2px 8px rgba(13, 58, 53, 0.2)' : 'none'
+            }}
+            onClick={() => {
+              setPortalMode('staff');
+              setError(null);
+            }}
+          >
+            <Building size={16} /> Staff / Admin Login
+          </button>
+
+          <button
+            type="button"
+            style={{
+              flex: 1,
+              padding: '0.6rem 0.5rem',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+              transition: 'all 0.2s ease',
+              background: portalMode === 'citizen' ? 'var(--deep-teal)' : 'transparent',
+              color: portalMode === 'citizen' ? '#FFFFFF' : 'var(--secondary-text)',
+              boxShadow: portalMode === 'citizen' ? '0 2px 8px rgba(13, 58, 53, 0.2)' : 'none'
+            }}
+            onClick={() => {
+              setPortalMode('citizen');
+              setError(null);
+            }}
+          >
+            <Globe size={16} /> Citizen Portal
+          </button>
+        </div>
+
+        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div
             style={{
               width: '56px',
@@ -81,11 +149,13 @@ export const LoginPage = () => {
           >
             <Shield size={28} />
           </div>
-          <h1 style={{ fontSize: '2rem', fontFamily: 'var(--font-h1)', color: 'var(--primary-dark-teal)', fontWeight: 700 }}>
-            Assetly
+          <h1 style={{ fontSize: '1.85rem', fontFamily: 'var(--font-h1)', color: 'var(--primary-dark-teal)', fontWeight: 700 }}>
+            {portalMode === 'staff' ? 'Internal Staff Portal' : 'Public Citizen Portal'}
           </h1>
-          <p style={{ color: 'var(--secondary-text)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Infrastructure Asset Inventory Platform
+          <p style={{ color: 'var(--secondary-text)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+            {portalMode === 'staff'
+              ? 'Sign in to access Admin, Supervisor, Engineer & Auditor Workspaces'
+              : 'Sign in to report infrastructure issues and track grievances'}
           </p>
         </div>
 
@@ -117,7 +187,7 @@ export const LoginPage = () => {
                 type="email"
                 className="glass-input"
                 style={{ paddingLeft: '2.5rem' }}
-                placeholder="name@organization.gov"
+                placeholder={portalMode === 'staff' ? 'admin@demo.com or engineer@demo.com' : 'citizen@example.com'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -144,21 +214,28 @@ export const LoginPage = () => {
           </div>
 
           <Button type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Authenticating...' : 'Sign In'} <ArrowRight size={18} />
+            {loading ? 'Authenticating...' : portalMode === 'staff' ? 'Sign In to Workspace' : 'Sign In as Citizen'} <ArrowRight size={18} />
           </Button>
         </form>
 
         <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--subtle-border)', textAlign: 'center', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {portalMode === 'citizen' ? (
+            <div>
+              <span style={{ color: 'var(--secondary-text)' }}>New Citizen User? </span>
+              <Link to="/register" style={{ color: 'var(--deep-teal)', textDecoration: 'underline', fontWeight: 700 }}>
+                Register Citizen Account
+              </Link>
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-laurel)' }}>
+              Staff accounts are created by your Admin via Email Invitation.
+            </div>
+          )}
+
           <div>
-            <span style={{ color: 'var(--secondary-text)' }}>Don't have an account? </span>
-            <Link to="/register" style={{ color: 'var(--deep-teal)', textDecoration: 'underline', fontWeight: 700 }}>
-              Create Account / Sign Up
-            </Link>
-          </div>
-          <div>
-            <span style={{ color: 'var(--secondary-text)' }}>Citizen reporting issue? </span>
+            <span style={{ color: 'var(--secondary-text)' }}>Public Report Portal? </span>
             <Link to="/report" style={{ color: 'var(--deep-teal)', textDecoration: 'underline', fontWeight: 700 }}>
-              Public Citizen Portal
+              Submit Grievance Report
             </Link>
           </div>
         </div>

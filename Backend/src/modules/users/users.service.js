@@ -9,7 +9,12 @@ import { clearUserCache } from '../../middleware/authenticate.js';
 import { sendInvitationEmail } from '../../common/email.js';
 
 export const listUsers = async (scopeFilter) => {
-  return User.find(scopeFilter).select('-passwordHash').populate('zoneIds', '_id name code').sort({ createdAt: -1 });
+  const filter = { ...scopeFilter };
+  if (filter.zoneId) {
+    filter.zoneIds = filter.zoneId;
+    delete filter.zoneId;
+  }
+  return User.find(filter).select('-passwordHash').populate('zoneIds', '_id name code').sort({ createdAt: -1 });
 };
 
 export const getUserById = async (id, scopeFilter) => {
@@ -20,7 +25,7 @@ export const getUserById = async (id, scopeFilter) => {
   return user;
 };
 
-export const inviteUser = async (actorUser, { name, email, role, zoneIds = [] }) => {
+export const inviteUser = async (actorUser, { name, email, role, zoneIds = [], password = null }) => {
   const allowedRoles = ['supervisor', 'engineer', 'auditor'];
   if (!allowedRoles.includes(role)) {
     throw new BadRequestError('Admin cannot invite users with role: ' + role);
@@ -40,11 +45,13 @@ export const inviteUser = async (actorUser, { name, email, role, zoneIds = [] })
   const normalizedEmail = email.toLowerCase().trim();
   const existing = await User.findOne({ email: normalizedEmail });
   if (existing) {
-    if (existing.status === 'invited') {
-      throw new ConflictError('An invitation has already been sent to this email. You can resend the invitation from the user list.');
-    }
     throw new ConflictError('User with this email address already exists');
   }
+
+  // Generate initial password if not specified
+  const initialPassword = password || `Assetly@${Math.floor(100 + Math.random() * 900)}`;
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(initialPassword, salt);
 
   const user = await User.create({
     orgId: actorUser.orgId,
@@ -52,8 +59,8 @@ export const inviteUser = async (actorUser, { name, email, role, zoneIds = [] })
     email: normalizedEmail,
     role,
     zoneIds: zoneIds || [],
-    status: 'invited',
-    passwordHash: ''
+    status: 'active',
+    passwordHash
   });
 
   const rawToken = randomBytes(32).toString('hex');
@@ -75,7 +82,8 @@ export const inviteUser = async (actorUser, { name, email, role, zoneIds = [] })
     name: user.name,
     role: user.role,
     zoneNames,
-    rawToken
+    rawToken,
+    password: initialPassword
   });
 
   return User.findById(user._id).select('-passwordHash').populate('zoneIds', '_id name code');
@@ -87,11 +95,13 @@ export const resendInvite = async (actorUser, targetUserId, scopeFilter) => {
     throw new NotFoundError('User not found');
   }
 
-  if (targetUser.status !== 'invited') {
-    throw new BadRequestError('User is not pending invitation activation');
-  }
+  // Generate new temporary password
+  const newPassword = `Assetly@${Math.floor(100 + Math.random() * 900)}`;
+  const salt = await bcrypt.genSalt(10);
+  targetUser.passwordHash = await bcrypt.hash(newPassword, salt);
+  targetUser.status = 'active';
+  await targetUser.save();
 
-  // Invalidate any active previous invitations for this user
   await UserInvitation.updateMany({ userId: targetUser._id, usedAt: null }, { usedAt: new Date() });
 
   const rawToken = randomBytes(32).toString('hex');
@@ -115,10 +125,11 @@ export const resendInvite = async (actorUser, targetUserId, scopeFilter) => {
     name: targetUser.name,
     role: targetUser.role,
     zoneNames,
-    rawToken
+    rawToken,
+    password: newPassword
   });
 
-  return { message: 'Invitation resent successfully' };
+  return { message: 'Invitation and initial password resent successfully' };
 };
 
 export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) => {
@@ -127,12 +138,10 @@ export const updateUser = async (actorUser, targetUserId, updates, scopeFilter) 
     throw new NotFoundError('User not found');
   }
 
-  // Business Rule: Users cannot change their own role
   if (updates.role && actorUser._id.toString() === targetUserId.toString()) {
     throw new ForbiddenError('Users cannot change their own role');
   }
 
-  // Business Rule: Cannot demote or deactivate the last active Admin
   if (
     (updates.role && updates.role !== 'admin' && targetUser.role === 'admin') ||
     (updates.status && updates.status === 'deactivated' && targetUser.role === 'admin')

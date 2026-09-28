@@ -5,7 +5,7 @@ import { useCan } from '../../shared/hooks/useCan';
 import { Drawer } from '../../shared/ui/Modal';
 import { Button } from '../../shared/ui/Button';
 import { Chip } from '../../shared/ui/Chip';
-import { CheckSquare, MessageSquare, Send, CheckCircle, XCircle } from 'lucide-react';
+import { CheckSquare, MessageSquare, Send, CheckCircle, XCircle, Play } from 'lucide-react';
 
 export const WorkOrderDrawer = ({ workOrder, isOpen, onClose, zoneUsers = [] }) => {
   const { can } = useCan();
@@ -19,6 +19,14 @@ export const WorkOrderDrawer = ({ workOrder, isOpen, onClose, zoneUsers = [] }) 
   const assignMutation = useMutation({
     mutationFn: async (assigneeId) => {
       const res = await apiClient.post(`/work-orders/${workOrder._id}/assign`, { assigneeId });
+      return res.data.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries(['work-orders'])
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async (status) => {
+      const res = await apiClient.patch(`/work-orders/${workOrder._id}`, { status });
       return res.data.data;
     },
     onSuccess: () => queryClient.invalidateQueries(['work-orders'])
@@ -79,10 +87,10 @@ export const WorkOrderDrawer = ({ workOrder, isOpen, onClose, zoneUsers = [] }) 
           <p style={{ fontSize: '0.9rem', marginTop: '0.2rem' }}>{workOrder.description || 'No description provided.'}</p>
         </div>
 
-        {/* Assignee Picker */}
+        {/* Assignee Picker for Supervisors / Admins */}
         <div>
           <span style={{ fontSize: '0.8rem', color: 'var(--color-laurel)', display: 'block', marginBottom: '0.3rem' }}>
-            Assignee (Zone Technicians)
+            Assignee (Zone Technicians & Engineers)
           </span>
           {can('workorder:assign') ? (
             <select
@@ -90,21 +98,38 @@ export const WorkOrderDrawer = ({ workOrder, isOpen, onClose, zoneUsers = [] }) 
               value={workOrder.assigneeId?._id || workOrder.assigneeId || ''}
               onChange={(e) => assignMutation.mutate(e.target.value)}
             >
-              <option value="">Unassigned</option>
-              {zoneUsers.map((u) => (
-                <option key={u._id} value={u._id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
+              <option value="">Unassigned (Open Request)</option>
+              {zoneUsers
+                .filter((u) => u.role === 'engineer' || u.role === 'supervisor' || u.role === 'admin')
+                .map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.name} ({u.role.charAt(0).toUpperCase() + u.role.slice(1)} - {u.zoneIds?.map((z) => z.code || z.name).join(', ') || 'Global'})
+                  </option>
+                ))}
             </select>
           ) : (
-            <span>{workOrder.assigneeId?.name || 'Unassigned'}</span>
+            <div style={{ fontWeight: 600, color: 'var(--primary-dark-teal)' }}>
+              {workOrder.assigneeId?.name || 'Unassigned'}
+            </div>
           )}
         </div>
 
         {/* Action Buttons */}
         {workOrder.status !== 'completed' && workOrder.status !== 'cancelled' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '0.5rem' }}>
+            {/* Start Work Action */}
+            {(workOrder.status === 'open' || workOrder.status === 'assigned') && can('workorder:update') && (
+              <Button
+                variant="primary"
+                icon={Play}
+                onClick={() => updateStatusMutation.mutate('in_progress')}
+                disabled={updateStatusMutation.isPending}
+              >
+                Start Work (In Progress)
+              </Button>
+            )}
+
+            {/* Complete Work Action */}
             {can('workorder:complete') && (
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <input
@@ -115,7 +140,7 @@ export const WorkOrderDrawer = ({ workOrder, isOpen, onClose, zoneUsers = [] }) 
                   onChange={(e) => setActualCost(e.target.value)}
                 />
                 <Button variant="primary" icon={CheckCircle} onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
-                  Complete
+                  Complete Work Order
                 </Button>
               </div>
             )}

@@ -35,6 +35,7 @@ export const ROLE_PERMS = {
     'ai:detect': 'org'
   },
   supervisor: {
+    'user:read': 'org',
     'zone:read': 'zone',
     'category:read': 'org',
     'asset:read': 'zone',
@@ -61,6 +62,7 @@ export const ROLE_PERMS = {
     'ai:detect': 'zone'
   },
   engineer: {
+    'user:read': 'org',
     'zone:read': 'zone',
     'category:read': 'org',
     'asset:read': 'zone',

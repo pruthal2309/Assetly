@@ -8,7 +8,7 @@ import { Chip } from '../../shared/ui/Chip';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
 import { Skeleton } from '../../shared/ui/Toast';
-import { UserPlus, Send, AlertCircle } from 'lucide-react';
+import { UserPlus, Send, AlertCircle, Key } from 'lucide-react';
 
 export const UsersPage = () => {
   const { can } = useCan();
@@ -19,6 +19,7 @@ export const UsersPage = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('engineer');
+  const [password, setPassword] = useState('');
   const [selectedZoneIds, setSelectedZoneIds] = useState([]);
   const [error, setError] = useState(null);
   const [resendSuccessId, setResendSuccessId] = useState(null);
@@ -44,6 +45,7 @@ export const UsersPage = () => {
       setName('');
       setEmail('');
       setRole('engineer');
+      setPassword('');
       setSelectedZoneIds([]);
       setError(null);
     },
@@ -94,6 +96,7 @@ export const UsersPage = () => {
       name,
       email,
       role,
+      password: password.trim() || undefined,
       zoneIds: selectedZoneIds
     });
   };
@@ -174,7 +177,7 @@ export const UsersPage = () => {
         const isSelf = currentUser?.id === u._id || currentUser?._id === u._id;
         return (
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            {u.status === 'invited' && can('user:invite') && (
+            {can('user:invite') && (
               <Button
                 size="sm"
                 variant="secondary"
@@ -211,7 +214,7 @@ export const UsersPage = () => {
         <div>
           <h1 style={{ fontSize: '1.8rem' }}>User & Team Administration</h1>
           <p style={{ color: 'var(--color-laurel)', fontSize: '0.9rem' }}>
-            Invite internal staff members, assign roles, and manage zone access
+            Invite staff members, assign roles/zones, and automatically issue credentials
           </p>
         </div>
         {can('user:invite') && (
@@ -226,7 +229,7 @@ export const UsersPage = () => {
       </div>
 
       {/* Invite User Modal */}
-      <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="Invite New User">
+      <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="Invite New Staff Member">
         <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {error && (
             <div
@@ -294,6 +297,22 @@ export const UsersPage = () => {
 
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+              Initial Password (Optional)
+            </label>
+            <input
+              type="text"
+              className="glass-input"
+              placeholder="Auto-generated if left blank (e.g. Assetly@384)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-laurel)', marginTop: '0.3rem' }}>
+              Credentials will be emailed directly to the user's Mail ID via SMTP.
+            </p>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
               Assigned Zones {['supervisor', 'engineer'].includes(role) ? '*' : '(Optional)'}
             </label>
             {['supervisor', 'engineer'].includes(role) && (
@@ -352,7 +371,7 @@ export const UsersPage = () => {
           </div>
 
           <Button type="submit" disabled={inviteMutation.isPending} style={{ marginTop: '0.5rem' }}>
-            {inviteMutation.isPending ? 'Sending Invitation...' : 'Send Invitation'}
+            {inviteMutation.isPending ? 'Sending Invitation...' : 'Send Invitation & Credentials'}
           </Button>
         </form>
       </Modal>
