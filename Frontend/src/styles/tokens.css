@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Inter:wght@300;400;500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&display=swap');
+
+:root {
+  /* Reference Color Tokens */
+  --primary-dark-teal: #002E2C;
+  --deep-teal: #004643;
+  --main-bg: #F8FAF8;
+  --warm-neutral: #E5E2DA;
+  --plum-accent: #493545;
+  --pure-white: #FFFFFF;
+  --secondary-text: #4E444B;
+  --subtle-border: #E0E6E4;
+  --hover-surface: #F2F4F3;
+
+  /* Legacy CSS Variable Mappings */
+  --bg-deep: #F8FAF8;
+  --color-moderate: #004643;
+  --color-laurel: #4E444B;
+  --color-cream: #002E2C;
+  --text-dark: #002E2C;
+  --text-muted: #4E444B;
+
+  /* Usability & Health Status Colors */
+  --health-healthy: #059669;
+  --health-healthy-bg: #E6F4EA;
+  --health-watch: #D97706;
+  --health-watch-bg: #FEF3C7;
+  --health-high: #EA580C;
+  --health-high-bg: #FFEDD5;
+  --health-critical: #DC2626;
+  --health-critical-bg: #FEE2E2;
+
+  /* Recommended Font Families */
+  --font-h1: 'Playfair Display', Georgia, serif;
+  --font-heading: 'Inter', 'Roboto', 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', 'Roboto', 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Recommended Type Scale (16px base) */
+  --text-h1: clamp(2rem, 4vw, 2.5rem);        /* 32px to 40px (2rem to 2.5rem) */
+  --text-h2: clamp(1.5rem, 3vw, 2rem);        /* 24px to 32px (1.5rem to 2rem) */
+  --text-h3: clamp(1.25rem, 2vw, 1.5rem);     /* 20px to 24px (1.25rem to 1.5rem) */
+  --text-body: 1rem;                           /* 16px to 18px (1rem to 1.125rem) */
+  --text-small: 0.875rem;                      /* 14px (0.875rem) */
+
+  /* Radii & Transitions */
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 6px;
+  --transition-fast: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  
+  /* Subtle Refined Shadows */
+  --shadow-subtle: 0 1px 3px rgba(0, 46, 44, 0.04), 0 4px 12px rgba(0, 46, 44, 0.03);
+  --shadow-dropdown: 0 4px 20px rgba(0, 46, 44, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--main-bg);
+  color: var(--primary-dark-teal);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-family: var(--font-h1);
+  font-size: var(--text-h1);
+  color: var(--primary-dark-teal);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-family: var(--font-heading);
+  font-size: var(--text-h2);
+  color: var(--primary-dark-teal);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+h3 {
+  font-family: var(--font-heading);
+  font-size: var(--text-h3);
+  color: var(--primary-dark-teal);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+h4, h5, h6, .font-heading {
+  font-family: var(--font-heading);
+  color: var(--primary-dark-teal);
+  font-weight: 600;
+}
+
+p {
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--secondary-text);
+}
+
+small, .caption, .text-small {
+  font-size: var(--text-small);
+  line-height: 1.5;
+}
+
+/* Accessible Focus Ring */
+:focus-visible {
+  outline: 2px solid var(--deep-teal);
+  outline-offset: 2px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  font-family: var(--font-heading);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

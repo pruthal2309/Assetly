@@ -1,0 +1,294 @@
+MASTER BUILD PROMPT: Assetly (Infrastructure Asset Inventory)
+
+project-root/
+├── frontend/                      (already created with: npm create vite@latest)
+├── backend/                       (already created with: npm init -y && npm i express cors mongoose dotenv)
+├── PRD_TRD.md   (product and technical spec)
+└── Vibe_Coding_Rules.md                (this file)
+PROMPT START
+
+You are a senior full-stack engineer. Build the complete Assetly web application, an infrastructure asset inventory and lifecycle management platform, inside the two existing folders frontend/ and backend/. Work autonomously, phase by phase, and verify each phase by actually running it before moving on.
+
+0. Context and Rules
+
+Read first, in this order, before writing any code:
+
+Infrastructure_Asset_Inventory_PRD_TRD_v2.md: the source of truth for features, RBAC, database schemas, indexes, API, business logic, and architecture. Follow it. Where this prompt simplifies something, this prompt wins.
+asset-inventory-ui.html: the exact visual design (glassmorphism, palette, layout, components, interactions). Reuse its CSS variables and glass recipe; do not invent a new look.
+
+What already exists (do NOT re-initialise or overwrite):
+
+frontend/: a Vite React scaffold created by npm create vite@latest. Inspect frontend/package.json and src/main.* first to detect whether it is JavaScript or TypeScript, and keep that language for all new files.
+backend/: package.json created by npm init -y with only express, cors, mongoose, dotenv installed. It is plain JavaScript. Use ES modules ("type": "module"), Node 20+, and node --watch for dev (no nodemon).
+
+Global rules:
+
+Do not run npm create vite or npm init again. Install extra packages only where this prompt says so.
+Ports: backend 8000, frontend 5173. The frontend calls the API through a Vite proxy (/api → http://localhost:8000) so cookies work without CORS pain. Still configure CORS with credentials: true and an origin allow-list.
+Colors come only from these tokens (define as CSS variables, no other hard-coded colors except the four health colors): Deep Bluish 
+#0D3A35, Moderate Green 
+#276152, Laurel Green 
+#B1B7AB, Light Cream 
+#FBF6F0. Health: healthy 
+#8FD3B0, watch 
+#E6C36A, high 
+#E38B5F, critical 
+#EF6A62.
+Use plain CSS (copied and extended from asset-inventory-ui.html), not Tailwind, so the design matches exactly.
+Every backend query on tenant data must be scoped by orgId, plus zone or ownership scope from the RBAC layer. Never filter after fetching.
+Never store or log secrets or passwords. Never commit .env.
+Write real, working code. No placeholders, no TODO, no mock data in the UI once the API exists (mock data is allowed only in the seed script).
+After each phase: run the server or build, fix all errors and warnings, and print a short checklist of what works.
+Keep files small and focused. Add short comments only where logic is non-obvious.
+If a decision is not covered, choose the simplest option consistent with the spec and note it in README.md under "Decisions".
+PHASE 1: Backend
+1.1 Install extra dependencies (inside backend/)
+bash
+npm i jsonwebtoken bcryptjs zod helmet express-rate-limit cookie-parser morgan multer qrcode node-cron
+npm i -D vitest supertest mongodb-memory-server
+1.2 package.json changes
+json
+{
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/scripts/seed.js",
+    "test": "vitest run"
+  }
+}
+1.3 Environment
+
+Create backend/.env.example and a matching local .env:
+
+NODE_ENV=development
+PORT=8000
+MONGODB_URI=mongodb://127.0.0.1:27017/assetly?replicaSet=rs0
+USE_TRANSACTIONS=true
+JWT_ACCESS_SECRET=change_me_access
+JWT_ACCESS_TTL=15m
+REFRESH_TTL_DAYS=7
+CORS_ORIGINS=http://localhost:5173
+UPLOAD_DIR=uploads
+PUBLIC_BASE_URL=http://localhost:8000
+SEED_CENTER_LAT=12.9141
+SEED_CENTER_LNG=74.8560
+VISION_API_KEY=
+
+USE_TRANSACTIONS=false must make every transaction helper run the same steps without a session (so it also works on a standalone local Mongo). Validate env with Zod at boot and fail fast with a clear message.
+
+1.4 Folder structure
+backend/src/
+├── app.js                 # express app assembly (no listen)
+├── server.js              # connect DB, ensure indexes, start jobs, listen
+├── config/env.js
+├── common/
+│   ├── errors.js          # AppError, NotFound, Forbidden, Conflict, Unprocessable
+│   ├── permissions.js     # ROLE_PERMS map + Permission list (spec section 9)
+│   ├── scope.js           # buildScopeFilter(scope, user)
+│   ├── pagination.js      # cursor helpers
+│   ├── asyncHandler.js
+│   └── sanitize.js        # strips keys starting with $ or containing . from body/query/params
+├── middleware/
+│   ├── requestId.js  authenticate.js  authorize.js  validate.js  rateLimit.js  errorHandler.js  audit.js
+├── db/
+│   ├── connect.js  indexes.js  withTransaction.js
+├── models/                # one file per collection in spec section 12.3
+│   ├── Organization.js Zone.js User.js Session.js Category.js Asset.js Inspection.js
+│   ├── WorkOrder.js AssetEvent.js Media.js CitizenReport.js AuditLog.js Counter.js Notification.js
+├── modules/
+│   ├── auth/           (routes, controller, service, schemas)
+│   ├── users/ zones/ categories/
+│   ├── assets/         (+ lifecycle.js, health.js, code.js)
+│   ├── inspections/ workorders/ reports/ media/ dashboard/ audit/ ai/
+├── jobs/index.js       # node-cron jobs
+└── scripts/seed.js
+backend/uploads/        # gitignored, served statically at /uploads
+
+Each module: *.routes.js, *.controller.js, *.service.js, *.schemas.js (Zod). Layering: route → controller → service → model. Controllers never query the DB; services never touch req/res.
+
+1.5 Middleware order in app.js
+
+requestId → helmet → cors({origin: allow-list, credentials:true}) → morgan → global rateLimit (100/min) → express.json({limit:'1mb'}) → cookieParser → sanitize → routes under /api/v1 → static /uploads → 404 handler → errorHandler. Stricter rate limits on /auth/* (10/min), /public/* (20/min), /ai/* (10/min).
+
+1.6 Auth (spec sections 13.4 and 16)
+POST /auth/login: verify bcrypt hash; issue access JWT (sub, orgId, role, zoneIds, tokenVersion), 15 min, returned in JSON body; issue refresh token (random 64 bytes) stored hashed in sessions with familyId, sent as httpOnly, sameSite:'strict', secure in production cookie.
+POST /auth/refresh: rotate refresh token; if a revoked token is reused, revoke the whole family and return 401.
+POST /auth/logout: revoke session, clear cookie.
+GET /auth/me: return user, zones, and the permission map for the role so the frontend never duplicates the matrix.
+authenticate middleware: verify JWT, load user (cache 60 s in memory), reject if status !== 'active' or tokenVersion mismatch.
+Public citizen self-registration: POST /auth/register-citizen creates role citizen only.
+Deactivating a user or changing a role increments tokenVersion and revokes sessions.
+1.7 RBAC (spec section 9), implement exactly
+
+common/permissions.js exports ROLE_PERMS for roles admin, supervisor, engineer, auditor, citizen, mapping each permission (asset:read, asset:create, asset:update, asset:status:operate, asset:status:retire, workorder:assign, audit:read, and the full catalogue from spec 9.3) to a scope: 'org' | 'zone' | 'own' | 'public'. Fill it from the matrix in spec 9.4.
+
+js
+// middleware/authorize.js
+export const authorize = (perm) => (req, res, next) => {
+  const scope = ROLE_PERMS[req.user.role]?.[perm];
+  if (!scope) return deny(req, res, perm);           // 403 + audit(outcome:'denied')
+  req.scope = buildScopeFilter(scope, req.user);     // {orgId} | {orgId, zoneId:{$in}} | {orgId, createdBy|assigneeId}
+  next();
+};
+
+Rules that must be implemented in services:
+
+Merge req.scope into every list and single-record query. Out-of-scope single reads return 404, not 403.
+Engineer PATCH /assets/:id may change only name, address, specs, notes, location (within 25 m); reject other fields with 403.
+Only Admin can move an asset to decommissioned or disposed, and a reason is required.
+Engineer can only do installed → in_service on assets they created.
+Supervisor cannot change zoneId; only Admin can.
+Work order complete: assignee, or Supervisor or Admin in scope.
+Cannot demote or deactivate the last active Admin; users cannot change their own role (409/403).
+Citizen sees only /public/* and their own reports; GET /public/assets/:assetCode returns only assetCode, name, category, status.
+Every denied action is written to auditLogs.
+1.8 Models and indexes
+
+Implement every collection and index from spec sections 12.3 and 12.4 (2dsphere on assets.location and citizenReports.location, compound indexes leading with orgId, TTL on sessions.expiresAt, notifications, and auditLogs). db/indexes.js calls syncIndexes() at boot. assetEvents and auditLogs repositories expose insert and read only. Asset codes come from counters with category prefixes: RD road, SL streetlight, BR bridge, PL pipeline, DR drain, BD building; format SL-0042.
+
+1.9 Business logic
+assets/lifecycle.js: state machine and role rules from spec 16.1; invalid transition returns 409; each transition writes assetEvents + auditLogs inside withTransaction.
+assets/health.js: health score formula and risk levels from spec 16.2; store health.factors; recompute on inspection create, work order change, and nightly.
+Inspection create: insert inspection, update asset.lastInspection, nextInspectionDue = inspectedAt + category.inspectionIntervalDays, recompute health, write event, all in one transaction.
+Work order: create, assign (assignee must belong to the asset's zone), start (asset → under_maintenance), complete (transaction: update order, append log, recompute health, restore in_service when no other open orders, write event), cancel with reason, comments capped at 50.
+Citizen report: create with trackingCode, $near match within 50 m on active assets, auto-create work order (source:'citizen_report'), status updates.
+Asset specs validated against category.specSchema (required, type, number bounds).
+Media: Multer saves to UPLOAD_DIR (jpeg/png/webp, max 5 MB), save metadata in media, return URL. Structure the code behind a storage adapter so Cloudinary or S3 can be swapped in later.
+AI: modules/ai with DamageDetector interface. Implement MockDetector (deterministic pseudo-result from file size and hash) and a HostedVisionDetector that is used only if VISION_API_KEY is set; 8 s timeout; on failure return {status:'unavailable'}.
+Dashboard: $facet aggregation from spec 12.5, scope-aware; cost trend by month.
+Jobs (node-cron): nightly health recompute, daily preventive work order generation (idempotent), daily overdue notifications.
+1.10 API surface
+
+Implement every endpoint in spec section 15 with the permission listed there. Conventions from spec 13.7: envelope {data, meta}, errors {error:{code,message,details,requestId}}, cursor pagination, Zod validation on body, query, and params (reject unknown query params), Idempotency-Key on POST /assets and POST /public/reports (store keys with 24 h TTL). Add GET /healthz and GET /readyz. Add GET /assets/map?bbox=w,s,e,n&category=&status=&risk= returning lightweight points (_id, assetCode, name, categoryKey, location, status, health.score, health.riskLevel).
+
+1.11 Seed script (npm run seed)
+
+Idempotent (wipes and recreates demo data). Create:
+
+1 organisation "Demo City"; 5 zones; 6 categories with specSchema.
+Users (password shown in README): admin@demo.com / Admin@123, supervisor@demo.com / Super@123 (zones 1 and 2), engineer@demo.com / Engineer@123 (zone 1), auditor@demo.com / Audit@123, citizen@demo.com / Citizen@123.
+500 assets scattered within about 6 km of SEED_CENTER_LAT/LNG with realistic category mix (streetlights 40%, roads 25%, drains 15%, pipelines 10%, bridges and buildings 10%), installed 0 to 15 years ago, varied ratings, computed health.
+250 inspections, 70 work orders in mixed statuses, 12 citizen reports, event timelines, and 3 "hero" assets with a full lifecycle story.
+1.12 Backend tests (Vitest + Supertest + mongodb-memory-server)
+Table-driven RBAC suite: for each role and each protected route, assert allowed or denied (200/201 vs 403/404) including in-zone vs out-of-zone.
+The 10 RBAC cases in spec 9.9.
+Lifecycle transitions, health score, refresh rotation and reuse detection, transaction rollback on failure.
+
+Phase 1 exit checklist: server boots against Mongo, npm run seed works, all five demo logins work, npm test passes, and you can demonstrate with curl that an engineer is blocked from retiring an asset.
+
+PHASE 2: Frontend
+2.1 Install extra dependencies (inside frontend/)
+bash
+npm i react-router-dom @tanstack/react-query axios zustand react-hook-form zod @hookform/resolvers leaflet react-leaflet react-leaflet-cluster recharts lucide-react html5-qrcode
+npm i -D vitest @testing-library/react @testing-library/jest-dom msw
+
+Do not add Tailwind or a UI library. Keep the language (JS or TS) already used by the scaffold; if TypeScript, add proper types.
+
+2.2 Vite config
+
+Add the dev proxy: server: { port: 5173, proxy: { '/api': 'http://localhost:8000', '/uploads': 'http://localhost:8000' } }. Set VITE_API_BASE=/api/v1 in .env.
+
+2.3 Folder structure
+frontend/src/
+├── app/
+│   ├── router.jsx            # lazy routes, guards
+│   ├── providers.jsx         # QueryClientProvider, Toast, Auth bootstrap
+│   └── guards/               # RequireAuth.jsx, RequirePermission.jsx
+├── features/
+│   ├── auth/                 # LoginPage, RegisterCitizenPage, authStore, useAuth
+│   ├── dashboard/            # DashboardPage, KpiCard, Charts
+│   ├── assets/               # AssetListPage, AssetFormPage, AssetDetailPage, LifecycleStepper, HealthRing, queries
+│   ├── map/                  # MapPage, AssetMap, useViewportAssets
+│   ├── inspections/          # InspectionForm, InspectionList
+│   ├── workorders/           # WorkOrdersPage (board), WorkOrderDrawer
+│   ├── reports/              # PublicReportPage, ReportStatusPage, StaffReportsPage
+│   ├── scan/                 # QrScanPage
+│   ├── public/               # PublicAssetPage (/a/:assetCode)
+│   └── admin/                # UsersPage, ZonesPage, CategoriesPage, AuditLogPage
+├── shared/
+│   ├── ui/                   # GlassCard, Button, Chip, Modal/Drawer, DataTable, Toast, Skeleton, EmptyState, Field, Badge
+│   ├── hooks/                # useCan, useGeolocation, useDebounce, useOnline
+│   ├── api/                  # client.js (axios + refresh interceptor), endpoints
+│   └── lib/                  # health.js (colors, labels), format.js
+├── styles/                   # tokens.css, glass.css, layout.css (extracted from asset-inventory-ui.html)
+└── main.jsx
+2.4 Behaviour
+Auth: access token kept in memory (Zustand), never in localStorage. On app load call /auth/refresh silently, then /auth/me. Axios interceptor: on 401, refresh once (queue parallel requests), retry, else log out.
+Permissions: useCan(perm) reads the permission map from /auth/me. RequirePermission redirects to a friendly /403 page. Sidebar items, buttons, table actions, and form fields are hidden or disabled by can(). The frontend never hard-codes the role matrix.
+State: TanStack Query for server data (keys like ['assets', filters], ['asset', id], ['dashboard']), Zustand only for auth and UI. Filters and pagination live in URL search params.
+Every screen has loading (skeleton), empty (with a clear next action), and error (what happened and a retry) states.
+2.5 Pages (match the routes and permissions in spec 14.4)
+Login: glass card centered over the blurred green background, with quick-fill buttons for the five demo users (dev only, shown when import.meta.env.DEV).
+Dashboard: KPI cards with count-up (as in the UI file), risk distribution, status breakdown, cost trend (Recharts), lists of critical and overdue assets, "My work orders" for engineers.
+Map: Leaflet with OSM tiles restyled to fit the dark green theme (CSS filter on the tile pane is acceptable), clustering, health-colored markers, critical pulse, category chips, search, viewport loading via /assets/map, and a right glass panel identical in structure to the UI file's detail panel (health ring, lifecycle stepper, actions).
+Assets list: table with filters (category, status, risk, zone, text), cursor pagination, row actions gated by permission.
+Asset form: category-driven dynamic fields from category.specSchema, GPS button, click-on-map picker, photo upload with preview, Zod validation, offline-safe submit (see 2.6).
+Asset detail: header with ring and badge, tabs (Overview, Timeline from /assets/:id/events, Inspections, Work orders, Media), QR image and print button, lifecycle actions shown only when allowed (status change modal with reason for retirement).
+Inspection form: rating, notes, photos, "Analyze photo" button calling /ai/detect-damage and showing type, severity, confidence with an editable severity field; on save show the new health score.
+Work orders: board with columns Open, Assigned, In progress, Completed; drawer with details, assignee picker (zone users), checklist, comments, cost, complete and cancel actions gated by permission.
+Citizen area (public): report form (photo, auto-location, description) that returns a tracking code; status page by code; /a/:assetCode public asset page.
+QR scan page using html5-qrcode that opens the asset by code.
+Admin: Users (invite, change role and zones, deactivate), Zones, Categories with specSchema editor, Audit log viewer (filters: actor, entity, outcome, date) including denied attempts highlighted.
+403 and 404 pages.
+2.6 Offline (implement a simple version)
+
+Detect offline with useOnline. If offline while creating an asset, inspection, or report, store the request in IndexedDB (use the small idb-keyval package or raw IndexedDB) with an Idempotency-Key; show a "Waiting to sync (n)" chip in the header; flush the queue on reconnect and toast "Synced n items". Skip service worker and precaching unless time remains.
+
+2.7 Design system (from asset-inventory-ui.html)
+
+Copy the CSS variables, background gradient blobs, .glass recipe, sidebar, KPI cards, chips, health ring, lifecycle stepper, work order list, pills, toast, and responsive rules into styles/. Requirements:
+
+Fonts: Bricolage Grotesque (headings, numbers) and Figtree (body).
+Under 760 px the sidebar becomes a floating bottom bar.
+Respect prefers-reduced-motion and prefers-reduced-transparency.
+Visible focus rings, labelled icon buttons, 44 px minimum touch targets.
+Only one entrance animation (KPI count-up) and a pulse on critical markers. No other decorative motion.
+Button and toast wording stay consistent ("Create work order" → "Work order created for RD-0117").
+Sentence case everywhere.
+2.8 Frontend tests
+
+Vitest and Testing Library: useCan, RequirePermission, LifecycleStepper, HealthRing, and the login flow with MSW.
+
+Phase 2 exit checklist: npm run build passes with no warnings, npm run dev works against the running backend, and each of the five demo users sees a different navigation and different actions.
+
+PHASE 3: Integration, polish, and delivery
+Root scripts: create a root package.json with concurrently so npm run dev starts both apps, npm run seed seeds the DB, and npm test runs both test suites. Add docker-compose.yml with a single-node MongoDB replica set (spec section 18.2) plus optional api and web services.
+End-to-end walk-through (run it yourself and fix anything that breaks):
+Engineer registers an asset with GPS and a photo, QR appears, marker shows on the map.
+Engineer logs an inspection, AI result appears, health drops, marker color changes.
+Engineer tries to retire the asset and is blocked; the attempt appears in the audit log.
+Supervisor creates and assigns a work order; the engineer completes it; health recovers and the asset returns to In service.
+Admin decommissions the asset with a reason; the timeline shows every step.
+Auditor can view everything but sees no create or edit controls.
+Citizen submits a report near an asset; it links to that asset and creates a work order; the tracking page shows progress.
+Performance: confirm /assets/map and /assets respond in under 500 ms on the seeded data; check explain('executionStats') uses indexes; add any missing index.
+Security pass: confirm no route is missing authenticate and authorize (write a test that walks the router and fails on unprotected non-public routes); confirm no secrets in logs; confirm cookies are httpOnly.
+Docs: write a root README.md containing: overview, tech stack, prerequisites (Node 20+, MongoDB replica set or Atlas), setup steps, environment variables, run commands, demo credentials table, architecture diagram (Mermaid), the RBAC matrix, API summary, folder structure, and a "Decisions" section.
+Add a .gitignore for node_modules, .env, uploads/, dist/.
+Definition of Done
+ npm run dev from the root starts backend and frontend; npm run seed loads demo data
+ All five roles work and are visibly different in navigation, screens, and actions
+ RBAC suite passes, including out-of-zone and denied-audit cases
+ Asset lifecycle Planned → Disposed works with a full timeline
+ Map, dashboard, inspections, work orders, citizen reports, QR, and AI (mock) work end to end
+ UI matches asset-inventory-ui.html at 1440 px and 390 px widths and uses only the defined tokens
+ No console errors, no failing tests, clean production builds
+ README.md lets a new person run the project in under 10 minutes
+Output required at the end
+A summary of what was built per phase.
+The exact commands to run the project.
+The demo credentials table.
+A list of anything skipped or simplified, and why.
+PROMPT END
+Quick follow-up prompts (paste as needed)
+
+Fix a failure: "Run the app, read the terminal and browser console, and fix every error you find. Do not change the design tokens or the RBAC matrix."
+
+Continue: "Continue with the next phase. Do not repeat completed work. Verify the previous phase still passes before starting."
+
+RBAC audit: "Audit every backend route against the RBAC matrix in the spec. Output a table of route, permission, scope, and test coverage, then fix gaps and add missing tests."
+
+Design audit: "Compare each page with asset-inventory-ui.html. List deviations in spacing, glass effect, colors, and typography, then fix them."
+
+Demo prep: "Create a DEMO.md with a 5-minute click-by-click script using the seeded users, and make sure every step works with the seeded data."
